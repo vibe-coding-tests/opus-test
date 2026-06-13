@@ -253,6 +253,8 @@ export class Game {
     giveSpell('petrificus', 1);
     giveSpell('impedimenta', 2);
     giveSpell('silencio', 1);
+    giveSpell('porcus', 1);
+    giveSpell('rictusempra', 2);
     giveSpell('patronum', 1);
     giveSpell('serpensortia', 1);
     giveSpell('avada');
@@ -262,14 +264,18 @@ export class Game {
   }
 
   dmSpawn(p) {
-    for (let tries = 0; tries < 12; tries++) {
-      const n = this.world.randomNode();
+    const spawnPool = this.world.dmSpawns?.length
+      ? this.world.dmSpawns
+      : [...(this.world.spawns.death || []), ...(this.world.spawns.order || [])];
+    const pts = shuffle(spawnPool);
+    for (let tries = 0; tries < pts.length; tries++) {
+      const sp = pts[tries];
       let nearest = Infinity;
       for (const q of this.players) {
-        if (q !== p && q.alive) nearest = Math.min(nearest, (q.pos.x - n.x) ** 2 + (q.pos.z - n.z) ** 2);
+        if (q !== p && q.alive) nearest = Math.min(nearest, (q.pos.x - sp.x) ** 2 + (q.pos.z - sp.z) ** 2);
       }
-      if (nearest > 14 * 14 || tries === 11) {
-        p.spawnAt(n.x, n.z, rand(0, Math.PI * 2), this.world);
+      if (nearest > 14 * 14 || tries === pts.length - 1) {
+        p.spawnAt(sp.x, sp.z, sp.yaw ?? rand(0, Math.PI * 2), this.world);
         this.dmLoadout(p);
         p.spawnProtT = 3;
         if (p.isHuman) this.hud.notice('Spawn protection — 3s or until you cast', 'info');
@@ -428,6 +434,8 @@ export class Game {
     this.spells.stopShield(victim);
     if (victim.wandProp) this.effects.removeWandDrop(victim.wandProp, false);
     victim.freezeT = 0;
+    victim.morphT = 0;
+    victim.morphId = null;
 
     // corpse launch from the killing blow (Avada/Bombarda ragdoll hard)
     const lh = victim.lastHit && this.time - victim.lastHit.t < 0.4 ? victim.lastHit : null;
@@ -576,6 +584,14 @@ export class Game {
         break;
       case 'petrificus':
         this.hud.hitFlash('#c8d4e0', 0.55); // world greys out as the bind takes hold
+        break;
+      case 'porcus':
+        this.hud.hitFlash('#ff8fc8', 0.55);
+        this.shake(0.22);
+        break;
+      case 'rictusempra':
+        this.hud.hitFlash('#ffd24a', 0.42);
+        this.shake(0.22);
         break;
       default:
         this.hud.hitFlash(css, 0.3);

@@ -89,6 +89,10 @@ export function build(scene) {
   M.site('B', -38, -48, -26, -32);
   M.spawns('death', 0, 37, 0);              // attackers outside the front doors
   M.spawns('order', 27, -33, Math.PI);      // goblin-office side, facing the hall
+  M.dmSpawns([
+    [0, 37, 0], [27, -33, Math.PI], [0, 0, Math.PI], [-14, -10, Math.PI / 2],
+    [-32, -40, 0], [27, -6, Math.PI / 2], [-28, -14, 0], [0, -40, 0],
+  ]);
 
   M.routes({
     attack: [
@@ -116,6 +120,17 @@ export function build(scene) {
   M.torch(-30, VY + 3.4, -40, 0x9fc4ff); // vault: cold goblin-light
   M.torch(0, VY + 3.0, -40, 0x9fc4ff);   // tunnel
   M.torch(29, 3.6, -36, 0xffd080);    // offices
+
+  M.npc('goblin', {
+    name: 'Vault Goblin',
+    route: [[-34, -42, VY], [-24, -34, VY], [-8, -40, VY], [-28, -46, VY]],
+    hp: 38, alarmRange: 11,
+  });
+  M.npc('goblin', {
+    name: 'Teller Goblin',
+    route: [[-14, -8, 0], [0, -3, 0], [14, -8, 0], [8, 8, 0], [-8, 8, 0]],
+    hp: 34, alarmRange: 12,
+  });
 
   return M.finalize();
 }

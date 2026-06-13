@@ -19,6 +19,7 @@ export class World {
     this.waters = [];
     this.zones = { siteA: null, siteB: null, buy: {} };
     this.spawns = { order: [], death: [] };
+    this.dmSpawns = [];
     this.bounds = { x0: -10, z0: -10, x1: 10, z1: 10 };
     this.nav = null;
     this._grid = null;

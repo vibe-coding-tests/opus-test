@@ -9,6 +9,10 @@ import { clamp, rand, choice } from './utils.js';
 // pseudo-spells for kill attribution / FX
 export const BARREL_SPELL = { id: 'barrel', name: 'Exploding Barrel', icon: 'bomb', color: 0xff8a2a, glow: 0xffc890, radius: 4.8, killReward: 100 };
 export const DRAGON_FIRE = { id: 'dragonfire', name: 'Dragonfire', icon: 'flame', color: 0xff5a1f, glow: 0xffae6e, radius: 1.7, fire: [4.5, 13] };
+export const BASILISK_GAZE = { id: 'basiliskgaze', name: 'Basilisk Gaze', icon: 'bind', color: 0x66ff99, glow: 0xd5ffe0, killReward: 0 };
+export const BASILISK_BITE = { id: 'basiliskbite', name: 'Basilisk Bite', icon: 'snake', color: 0x3fae5a, glow: 0x9fe8b4, killReward: 0 };
+export const GOBLIN_STING = { id: 'goblinsting', name: 'Goblin Dagger', icon: 'slash', color: 0xc8a23a, glow: 0xffe8a0, killReward: 0 };
+export const BLUDGER_HIT = { id: 'bludger', name: 'Bludger', icon: 'bomb', color: 0x30343a, glow: 0xb8c0c8, killReward: 0 };
 
 const V = new THREE.Vector3();
 const V2 = new THREE.Vector3();
@@ -85,11 +89,13 @@ export class Environment {
     this.owlT = rand(14, 26);
     this.snitch = null;
     this.dragon = null;
+    this.mapNpcs = [];
 
     if (this.scene) {
       this.grp = new THREE.Group();
       this.scene.add(this.grp);
       this.buildLife(LIFE[this.theme] || {});
+      this.buildMapNPCs(game.mapMeta.npcs || []);
     }
   }
 
@@ -225,6 +231,11 @@ export class Environment {
       const sp = this.snitch.grp.position;
       test(sp.x, sp.y, sp.z, 0.45, 'snitch', this.snitch);
     }
+    for (const npc of this.mapNpcs) {
+      if (npc.hp <= 0 || npc.disabledT > 0 || !npc.grp?.visible) continue;
+      const p = npc.grp.position;
+      test(p.x, p.y + (npc.hitY ?? 0.6), p.z, npc.hitR ?? 0.8, 'mapNpc', npc);
+    }
     for (const bell of this.bells) test(bell.x, bell.y - 0.25, bell.z, 0.8, 'bell', bell);
     return best;
   }
@@ -235,6 +246,8 @@ export class Environment {
       this.provoke(pr.owner);
     } else if (hit.kind === 'snitch') {
       this.catchSnitch(pr.owner);
+    } else if (hit.kind === 'mapNpc') {
+      this.hitMapNpc(hit.obj, pr, hitPos);
     } else if (hit.kind === 'bell') {
       this.g.particles.burst({ pos: hitPos, count: 10, color: 0xffd060, color2: 0xfff0b0, speed: 4, spread: 0.4, life: 0.4, size: 0.25, gravity: 4, drag: 2 });
       this.ringBell(hit.obj, pr.owner);
@@ -308,6 +321,7 @@ export class Environment {
       this.dragon.state = 'circle';
       this.dragon.breath = null;
     }
+    for (const npc of this.mapNpcs) this.resetMapNpc(npc);
     if (dirty) {
       this.world.finalize();
       this.world.buildNav(1.5);
@@ -350,6 +364,7 @@ export class Environment {
 
     if (!this.scene) return;
     this.updateDragon(dt);
+    this.updateMapNPCs(dt);
     this.updateLife(dt);
   }
 
@@ -447,6 +462,345 @@ export class Environment {
     }
 
     this.owlsOn = !!cfg.owls;
+  }
+
+  // ------------------------------------------------------------- map NPCs ---
+  buildMapNPCs(configs) {
+    for (const cfg of configs) {
+      if (cfg.type === 'basilisk') this.buildBasilisk(cfg);
+      else if (cfg.type === 'goblin') this.buildGoblin(cfg);
+      else if (cfg.type === 'bludger') this.buildBludger(cfg);
+    }
+  }
+
+  routePoint(pt) {
+    const x = pt.x ?? pt[0];
+    const z = pt.z ?? pt[1];
+    const y = pt.y ?? pt[2] ?? this.world.groundY(x, z, 30);
+    return { x, y, z };
+  }
+
+  buildBasilisk(cfg) {
+    const x = cfg.x ?? 0, z = cfg.z ?? 0;
+    const y = cfg.y ?? this.world.groundY(x, z, 30);
+    const grp = new THREE.Group();
+    const hide = new THREE.MeshLambertMaterial({ color: 0x173828 });
+    const belly = new THREE.MeshLambertMaterial({ color: 0x6a7f55 });
+    const segs = [];
+    for (let i = 0; i < 11; i++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.58 - i * 0.028, 14, 10), i % 2 ? belly : hide);
+      s.position.set(Math.sin(i * 0.9) * 0.18, 0.55 - i * 0.015, -i * 0.42);
+      s.scale.set(1.0, 0.62, 1.35);
+      grp.add(s);
+      segs.push(s);
+    }
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.68, 18, 12), hide);
+    head.position.set(0, 0.68, 0.58);
+    head.scale.set(1.0, 0.7, 1.35);
+    grp.add(head);
+    const snout = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.75, 8), hide);
+    snout.rotation.x = Math.PI / 2;
+    snout.position.set(0, 0.62, 1.18);
+    grp.add(snout);
+    for (const sx of [-0.2, 0.2]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0x9cff6f }));
+      eye.position.set(sx, 0.86, 1.05);
+      grp.add(eye);
+    }
+    grp.position.set(x, y, z);
+    grp.rotation.y = cfg.yaw ?? 0;
+    grp.userData.segs = segs;
+    this.grp.add(grp);
+    this.mapNpcs.push({
+      type: 'basilisk', cfg, grp, home: { x, y, z }, yaw: cfg.yaw ?? 0,
+      hp: cfg.hp ?? 110, maxHp: cfg.hp ?? 110, disabledT: 0,
+      hitR: 1.45, hitY: 0.65, range: cfg.range ?? 28,
+      gazeCd: rand(2.0, 4.0), gaze: null, biteCd: rand(0.5, 1.5),
+      wiggleT: rand(0, 9),
+    });
+  }
+
+  buildGoblin(cfg) {
+    const route = (cfg.route || []).map((p) => this.routePoint(p));
+    if (!route.length) {
+      const n = this.world.randomNode();
+      route.push({ x: n.x, y: n.y, z: n.z });
+    }
+    const p0 = route[0];
+    const grp = new THREE.Group();
+    const coat = new THREE.MeshLambertMaterial({ color: 0x4a3820 });
+    const skin = new THREE.MeshLambertMaterial({ color: 0xa98b5e });
+    const metal = new THREE.MeshLambertMaterial({ color: 0xbfa05a });
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.9, 8), coat);
+    body.position.y = 0.45;
+    grp.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 9), skin);
+    head.position.y = 1.0;
+    grp.add(head);
+    for (const sx of [-0.28, 0.28]) {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 6), skin);
+      ear.position.set(sx, 1.03, 0);
+      ear.rotation.z = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
+      grp.add(ear);
+    }
+    const dagger = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.42, 6), metal);
+    dagger.rotation.x = Math.PI / 2;
+    dagger.position.set(0.3, 0.68, 0.16);
+    grp.add(dagger);
+    grp.position.set(p0.x, p0.y, p0.z);
+    this.grp.add(grp);
+    this.mapNpcs.push({
+      type: 'goblin', cfg, grp, route, routeIdx: 1 % route.length,
+      hp: cfg.hp ?? 34, maxHp: cfg.hp ?? 34, disabledT: 0,
+      hitR: 0.6, hitY: 0.8, speed: cfg.speed ?? 2.6,
+      alarmCd: rand(0.3, 1.4), stabCd: rand(0.5, 1.4), wiggleT: rand(0, 9),
+    });
+  }
+
+  buildBludger(cfg) {
+    const route = (cfg.route || []).map((p) => this.routePoint(p));
+    if (!route.length) return;
+    const p0 = route[0];
+    const grp = new THREE.Group();
+    const iron = new THREE.MeshLambertMaterial({ color: 0x20242a });
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), iron);
+    grp.add(ball);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.32, 6), iron);
+      spike.position.set(Math.sin(a) * 0.42, Math.cos(i * 1.7) * 0.18, Math.cos(a) * 0.42);
+      spike.lookAt(spike.position.clone().multiplyScalar(2));
+      grp.add(spike);
+    }
+    grp.position.set(p0.x, p0.y, p0.z);
+    this.grp.add(grp);
+    this.mapNpcs.push({
+      type: 'bludger', cfg, grp, route, routeIdx: 1 % route.length,
+      hp: 999, maxHp: 999, disabledT: 0, hitR: 0.62, hitY: 0,
+      speed: cfg.speed ?? 10.5, hitCd: rand(0.4, 1.2), spin: rand(4, 8),
+    });
+  }
+
+  resetMapNpc(npc) {
+    npc.hp = npc.maxHp;
+    npc.disabledT = 0;
+    npc.grp.visible = true;
+    if (npc.home) {
+      npc.grp.position.set(npc.home.x, npc.home.y, npc.home.z);
+      npc.grp.rotation.y = npc.yaw ?? 0;
+    } else if (npc.route?.length) {
+      const p = npc.route[0];
+      npc.grp.position.set(p.x, p.y, p.z);
+      npc.routeIdx = 1 % npc.route.length;
+    }
+    npc.gaze = null;
+    npc.gazeCd = rand(1.5, 3.5);
+    npc.alarmCd = rand(0.4, 1.4);
+    npc.stabCd = rand(0.4, 1.4);
+    npc.hitCd = rand(0.4, 1.2);
+  }
+
+  disableMapNpc(npc, dur, hitPos) {
+    npc.hp = 0;
+    npc.disabledT = dur;
+    npc.grp.visible = false;
+    this.g.particles.burst({
+      pos: hitPos ?? npc.grp.position,
+      count: npc.type === 'bludger' ? 18 : 24,
+      color: npc.type === 'goblin' ? 0xc8a23a : npc.type === 'bludger' ? 0x707882 : 0x66ff99,
+      color2: 0xffffff, speed: 3.5, spread: 1, life: 0.55, size: 0.32, gravity: 2, drag: 2,
+    });
+  }
+
+  hitMapNpc(npc, pr, hitPos) {
+    this.g.effects.impact(hitPos, new THREE.Vector3(0, 1, 0), pr.spell, false);
+    if (pr.owner?.isHuman) this.g.hud.hitmarker(false);
+    if (npc.type === 'bludger') {
+      npc.routeIdx = (npc.routeIdx + 1) % npc.route.length;
+      npc.hitCd = Math.max(npc.hitCd, 0.8);
+      npc.speed = Math.min((npc.cfg.speed ?? 10.5) * 1.45, npc.speed + 2.0);
+      this.g.audio.play('stagger', { pos: hitPos, vol: 0.8 });
+      return;
+    }
+    const dmg = pr.spell.dmg >= 200 ? 999 : Math.max(10, pr.spell.dmg);
+    npc.hp -= dmg;
+    npc.disabledT = Math.max(npc.disabledT, npc.type === 'basilisk' ? 0.6 : 0.25);
+    this.g.audio.play('impact_flesh', { pos: hitPos, vol: 0.65 });
+    if (npc.hp <= 0) {
+      this.disableMapNpc(npc, npc.type === 'basilisk' ? 16 : 18, hitPos);
+      if (pr.owner?.isHuman) {
+        this.g.hud.notice(npc.type === 'basilisk' ? 'The basilisk recoils into the pipes.' : `${npc.cfg.name || 'Goblin'} retreats!`, 'good');
+      }
+    }
+  }
+
+  updateMapNPCs(dt) {
+    for (const npc of this.mapNpcs) {
+      if (npc.disabledT > 0) {
+        npc.disabledT -= dt;
+        if (npc.disabledT <= 0 && npc.hp <= 0) this.resetMapNpc(npc);
+        continue;
+      }
+      if (npc.hp <= 0) continue;
+      if (npc.type === 'basilisk') this.updateBasilisk(npc, dt);
+      else if (npc.type === 'goblin') this.updateGoblin(npc, dt);
+      else if (npc.type === 'bludger') this.updateBludger(npc, dt);
+    }
+  }
+
+  nearestVisiblePlayer(from, range, yOff = 0.8) {
+    let best = null, bd = range * range;
+    for (const p of this.g.players) {
+      if (!p.alive || p.cloakT > 0) continue;
+      const d2 = (p.pos.x - from.x) ** 2 + (p.pos.z - from.z) ** 2;
+      if (d2 >= bd || Math.abs(p.pos.y - from.y) > 5.5) continue;
+      if (!this.world.segmentClear(from.x, from.y + yOff, from.z, p.pos.x, p.pos.y + p.body.height * 0.55, p.pos.z)) continue;
+      best = p; bd = d2;
+    }
+    return best;
+  }
+
+  updateBasilisk(npc, dt) {
+    const g = this.g;
+    const p = npc.grp.position;
+    npc.wiggleT += dt * 2.4;
+    for (const [i, s] of (npc.grp.userData.segs || []).entries()) s.position.x = Math.sin(npc.wiggleT - i * 0.55) * 0.18;
+    npc.biteCd -= dt;
+    npc.gazeCd -= dt;
+    const target = this.nearestVisiblePlayer(p, npc.range, 0.8);
+    if (target) {
+      const wantYaw = Math.atan2(target.pos.x - p.x, target.pos.z - p.z);
+      const dy = ((wantYaw - npc.grp.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      npc.grp.rotation.y += clamp(dy, -2.4 * dt, 2.4 * dt);
+      const d2 = (target.pos.x - p.x) ** 2 + (target.pos.z - p.z) ** 2;
+      if (d2 < (npc.cfg.biteRange ?? 2.2) ** 2 && npc.biteCd <= 0) {
+        npc.biteCd = 2.6;
+        g.audio.play('snake_bite', { pos: target.pos, vol: 1 });
+        g.damage(target, null, 18, BASILISK_BITE, false, target.pos.clone().add(new THREE.Vector3(0, 0.9, 0)));
+        if (target.alive) {
+          target.applySnare(1.2, g);
+          target.slowT = Math.max(target.slowT, 1.8);
+          if (target.isHuman) g.hud.notice('Basilisk venom — move!', 'bad');
+        }
+      }
+      if (!npc.gaze && npc.gazeCd <= 0) {
+        npc.gaze = { target, t: 0, warned: false };
+        npc.gazeCd = npc.cfg.gazeCd ?? 4.5;
+        if (target.isHuman) g.hud.notice('BASILISK GAZE — look away!', 'bad');
+      }
+    }
+    if (!npc.gaze) return;
+    const z = npc.gaze;
+    z.t += dt;
+    const t = z.target;
+    if (!t.alive || !this.world.segmentClear(p.x, p.y + 0.8, p.z, t.pos.x, t.pos.y + 0.9, t.pos.z)) {
+      npc.gaze = null;
+      return;
+    }
+    if (Math.random() < dt * 22) {
+      const a = Math.random();
+      const pos = new THREE.Vector3(p.x + (t.pos.x - p.x) * a, p.y + 0.75 + Math.random() * 0.3, p.z + (t.pos.z - p.z) * a);
+      g.particles.puff('glow', { pos, life: 0.22, size0: 0.25, size1: 0.05, color: 0x66ff99, alpha0: 0.75, alpha1: 0, additive: true });
+    }
+    if (z.t < 0.9) return;
+    const look = t.lookDir();
+    look.y = 0;
+    if (look.lengthSq() > 0.001) look.normalize();
+    const toBasilisk = V.set(p.x - t.pos.x, 0, p.z - t.pos.z).normalize();
+    if (look.dot(toBasilisk) > 0.2) {
+      t.applyFreeze(0.85, g);
+      if (t.isHuman) g.hud.notice("You met the basilisk's eyes!", 'bad');
+    } else {
+      t.applySnare(2.4, g);
+      t.slowT = Math.max(t.slowT, 2.4);
+      if (t.isHuman) g.hud.notice('Basilisk glare grazed you — slowed!', 'bad');
+    }
+    g.effects.petrifyFX(t);
+    npc.gaze = null;
+  }
+
+  updateGoblin(npc, dt) {
+    const g = this.g;
+    const p = npc.grp.position;
+    npc.stabCd -= dt;
+    npc.alarmCd -= dt;
+    npc.wiggleT += dt * 8;
+    const target = this.nearestVisiblePlayer(p, npc.cfg.alarmRange ?? 10, 0.7);
+    let tx, ty, tz, spd = npc.speed;
+    if (target) {
+      tx = target.pos.x; ty = target.pos.y; tz = target.pos.z;
+      spd *= 1.15;
+      const d2 = (target.pos.x - p.x) ** 2 + (target.pos.z - p.z) ** 2;
+      if (npc.alarmCd <= 0) {
+        npc.alarmCd = 5.0;
+        g.audio.play('bell', { pos: p, vol: 0.45 });
+        g.noise({ pos: p }, 42);
+        if (target.isHuman) g.hud.notice(`${npc.cfg.name || 'Goblin'} raised the alarm!`, 'bad');
+      }
+      if (d2 < 1.55 ** 2 && npc.stabCd <= 0) {
+        npc.stabCd = 2.1;
+        g.audio.play('jinx', { pos: target.pos, vol: 0.8 });
+        g.damage(target, null, 12, GOBLIN_STING, false, target.pos.clone().add(new THREE.Vector3(0, 0.75, 0)));
+        if (target.alive) {
+          target.applySnare(0.75, g);
+          if (target.isHuman) g.hud.notice('Goblin dagger — snared!', 'bad');
+        }
+      }
+    } else {
+      const goal = npc.route[npc.routeIdx];
+      tx = goal.x; ty = goal.y; tz = goal.z;
+      if ((p.x - tx) ** 2 + (p.z - tz) ** 2 < 0.75 ** 2) npc.routeIdx = (npc.routeIdx + 1) % npc.route.length;
+    }
+    const dx = tx - p.x, dz = tz - p.z;
+    const len = Math.hypot(dx, dz);
+    if (len > 0.05) {
+      const nx = p.x + (dx / len) * spd * dt;
+      const nz = p.z + (dz / len) * spd * dt;
+      if (this.world.segmentClear(p.x, p.y + 0.4, p.z, nx, p.y + 0.4, nz)) {
+        p.x = nx; p.z = nz;
+      } else {
+        npc.routeIdx = (npc.routeIdx + 1) % npc.route.length;
+      }
+      p.y += clamp((ty ?? this.world.groundY(p.x, p.z, p.y + 1)) - p.y, -5 * dt, 5 * dt);
+      npc.grp.rotation.y = Math.atan2(dx, dz);
+    }
+    npc.grp.rotation.z = Math.sin(npc.wiggleT) * 0.035;
+  }
+
+  updateBludger(npc, dt) {
+    const g = this.g;
+    const p = npc.grp.position;
+    npc.hitCd -= dt;
+    npc.speed += ((npc.cfg.speed ?? 10.5) - npc.speed) * Math.min(1, dt * 0.35);
+    const goal = npc.route[npc.routeIdx];
+    const dx = goal.x - p.x, dy = goal.y - p.y, dz = goal.z - p.z;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 0.8) npc.routeIdx = (npc.routeIdx + 1) % npc.route.length;
+    else {
+      p.x += (dx / len) * npc.speed * dt;
+      p.y += (dy / len) * npc.speed * dt;
+      p.z += (dz / len) * npc.speed * dt;
+    }
+    npc.grp.rotation.x += dt * npc.spin;
+    npc.grp.rotation.z -= dt * npc.spin * 0.7;
+    if (npc.hitCd > 0) return;
+    for (const q of g.players) {
+      if (!q.alive || q.spawnProtT > 0) continue;
+      const d2 = (q.pos.x - p.x) ** 2 + (q.pos.z - p.z) ** 2;
+      if (d2 > 1.25 ** 2 || Math.abs(q.pos.y + 0.9 - p.y) > 2.2) continue;
+      const away = V.set(q.pos.x - p.x, 0, q.pos.z - p.z);
+      if (away.lengthSq() < 0.01) away.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+      away.normalize();
+      q.vel.x += away.x * 5.5;
+      q.vel.z += away.z * 5.5;
+      q.vel.y = Math.max(q.vel.y, 2.2);
+      q.staggerT = Math.max(q.staggerT, 0.45);
+      g.audio.play('stagger', { pos: q.pos, vol: 0.9 });
+      g.damage(q, null, 16, BLUDGER_HIT, false, q.pos.clone().add(new THREE.Vector3(0, 1.0, 0)));
+      if (q.isHuman) g.hud.notice('BLUDGER HIT!', 'bad');
+      npc.hitCd = npc.cfg.hitCd ?? 1.9;
+      break;
+    }
   }
 
   buildDragon(cx, cz, span) {

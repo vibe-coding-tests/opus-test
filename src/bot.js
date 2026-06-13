@@ -197,6 +197,8 @@ export class Bot {
     if (Math.random() < u * 0.5 && p.money > 1500) g.buy(p, 'spell', 'petrificus');
     if (Math.random() < u * 0.45 && p.money > 1300) g.buy(p, 'spell', 'impedimenta');
     if (Math.random() < u * 0.35 + ai.snipe * 0.1 && p.money > 1600) g.buy(p, 'spell', 'silencio');
+    if (Math.random() < u * 0.42 && p.money > 1650) g.buy(p, 'spell', 'porcus');
+    if (Math.random() < u * 0.5 && p.money > 1350) g.buy(p, 'spell', 'rictusempra');
     if (this.role.type === 'defend' && Math.random() < u * 0.45 && p.money > 1700) g.buy(p, 'spell', 'patronum');
     if (Math.random() < u * 0.4 && p.money > 1900) g.buy(p, 'spell', 'serpensortia');
     // gear by temperament: rushers grab brooms, lurkers love the cloak
@@ -220,6 +222,10 @@ export class Bot {
       p.ctrl.moveX = 0; p.ctrl.moveZ = 0;
       p.ctrl.castHeld = false; p.ctrl.altHeld = false; p.ctrl.jump = false;
       return;
+    }
+    if (p.morphT > 0) {
+      p.ctrl.castHeld = false; p.ctrl.altHeld = false;
+      this.charging = false;
     }
 
     this.thinkT -= dt;
@@ -487,7 +493,7 @@ export class Bot {
     // housekeeping
     if (p.mana < p.stats.mana * 0.3 && p.recharging <= 0 && !this.execUntil) p.startRecharge();
     if (p.health < 55 && p.equip.potion > 0) p.useEquip('potion');
-    if (p.equip.finite > 0 && (p.burnT > 0 || p.bleeds.length > 0 || p.slowT > 0 || p.snareT > 0)) p.useEquip('finite');
+    if (p.equip.finite > 0 && (p.burnT > 0 || p.bleeds.length > 0 || p.slowT > 0 || p.snareT > 0 || p.morphT > 0)) p.useEquip('finite');
     // lurkers vanish for the flank once the round is rolling
     if (p.equip.cloak > 0 && p.cloakT <= 0 && this.ai.lurk > 0.5 && this.role.type === 'attack' &&
         g.roundT < 90 && g.roundT > 40 && !p.hasRelic) {
@@ -1022,6 +1028,15 @@ export class Bot {
     if (enemy.silenceT <= 0 && dist < 34) {
       const ideal = enemy.charge || (enemy.shielding && dist < 24) || g.relic.defuser === enemy;
       add('silencio', 0.5 + (ideal ? 1.5 : 0) + sk.util * 0.45);
+    }
+    // polymorph: buy time against a dangerous duelist without fully rooting them
+    if (enemy.morphT <= 0 && dist > 5 && dist < 27) {
+      const ideal = enemy.curSpell === 'avada' || enemy.health > 55 || enemy.horizSpeed > 3;
+      add('porcus', 0.45 + (ideal ? 0.9 : 0) + sk.util * 0.45);
+    }
+    // tickling hex: cheap slow to set up follow-up damage
+    if (enemy.slowT <= 0 && dist > 4 && dist < 25) {
+      add('rictusempra', 0.45 + (enemy.horizSpeed > 2.5 ? 0.7 : 0) + sk.util * 0.35);
     }
     // disarm: punish a charge, a shield, or a low-mana scramble (an unlimited
     // bolt, so it carries most of the non-Stupefy variety in a long fight)

@@ -87,6 +87,22 @@ export const SPELLS = {
     color: 0xc886ff, glow: 0xeed4ff,
     role: 'Hex', desc: 'Steals the voice: no casting, no Protego for 1.8s. They can still run — and so can you.',
   },
+  porcus: {
+    id: 'porcus', name: 'Porcus Hex', kind: 'bolt', slot: 3, icon: 'bind',
+    dmg: 0, interval: 1.0, speed: 47, mana: 22, spread: [0.36, 2.05],
+    recoil: 0.012, bloom: 0.34,
+    falloff: null, hs: 1, morph: 2.35, morphId: 'pig', charges: 1, killReward: 300, price: 550,
+    color: 0xff8fc8, glow: 0xffd6ec,
+    role: 'Polymorph', desc: 'Transfiguration hex: briefly turns the target into a pig. They can scurry, but cannot cast or shield.',
+  },
+  rictusempra: {
+    id: 'rictusempra', name: 'Rictusempra', kind: 'bolt', slot: 3, icon: 'slow',
+    dmg: 4, interval: 0.72, speed: 56, mana: 13, spread: [0.38, 2.1],
+    recoil: 0.01, bloom: 0.25,
+    falloff: null, hs: 1, kb: 0.7, slow: 2.1, stagger: 0.12, charges: 2, killReward: 300, price: 350,
+    color: 0xffd24a, glow: 0xfff2b0,
+    role: 'Tickle Hex', desc: 'A quick tickling jinx: light damage, brief stagger, and a 30% slow for 2.1s.',
+  },
   serpensortia: {
     id: 'serpensortia', name: 'Serpensortia', kind: 'summon', slot: 5, icon: 'snake',
     dmg: 20, interval: 1.15, speed: 0, mana: 20, spread: [0, 0],
@@ -145,8 +161,8 @@ export const SPELLS = {
 };
 
 export const GRENADES = ['bombarda', 'lumos', 'fumos', 'incendio', 'patronum', 'serpensortia', 'episkey'];
-export const SLOT3 = ['expelliarmus', 'petrificus', 'impedimenta', 'silencio'];
-export const HEXES = ['expelliarmus', 'petrificus', 'impedimenta', 'silencio']; // the disable school
+export const SLOT3 = ['expelliarmus', 'petrificus', 'impedimenta', 'silencio', 'porcus', 'rictusempra'];
+export const HEXES = ['expelliarmus', 'petrificus', 'impedimenta', 'silencio', 'porcus', 'rictusempra']; // the disable school
 export const SLOT5 = ['lumos', 'fumos', 'incendio', 'patronum', 'serpensortia', 'episkey'];
 
 // -------------------------------------------------------------- HIT ZONES ---
@@ -508,7 +524,7 @@ export const EQUIPMENT = [
   { id: 'broom', name: 'Broomstick', price: 450, action: 'broom', max: 2, icon: 'broom', desc: 'Hold to FLY for up to 2.4s: steer where you look, Space climbs, Ctrl dives. Two mounts.' },
   { id: 'cloak', name: 'Invisibility Cloak', price: 500, action: 'cloak', max: 1, icon: 'cloak', desc: 'Vanish for 5.2s. Casting breaks it.' },
   { id: 'apparate', name: 'Apparition Charm', price: 450, action: 'apparate', max: 1, icon: 'blink', desc: 'Blink 7.5m in the direction you face. Once per round.' },
-  { id: 'finite', name: 'Finite Incantatem', price: 200, action: 'finite', max: 2, icon: 'ward', desc: 'Dispel your afflictions: fire, bleeding, slows, blinds.' },
+  { id: 'finite', name: 'Finite Incantatem', price: 200, action: 'finite', max: 2, icon: 'ward', desc: 'Dispel your afflictions: fire, bleeding, slows, blinds, and polymorphs.' },
   { id: 'vest', name: 'Dragonhide Vest', price: 700, action: null, max: 1, icon: 'vest', desc: 'Armor: takes 25% of every spell hit until it absorbs 55 damage. Survive and you keep it.' },
   { id: 'felix', name: 'Felix Felicis', price: 1000, action: null, max: 1, icon: 'luck', desc: 'Liquid luck: the next killing blow leaves you at 1 HP instead. One sip, one miracle.' },
   { id: 'portkey', name: 'Emergency Portkey', price: 350, action: 'portkey', max: 1, icon: 'portkey', desc: 'Channel 1.2s (interrupted by damage), then snap back to your spawn. One use.' },

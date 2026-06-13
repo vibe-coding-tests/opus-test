@@ -56,6 +56,10 @@ export function build(scene) {
   M.site('B', 18, 24, 32, 38);
   M.spawns('death', 0, -47, Math.PI);   // attackers face north up the tunnel
   M.spawns('order', 0, 35, 0);          // defenders face south
+  M.dmSpawns([
+    [0, -47, Math.PI], [0, 35, 0], [0, 2, 0], [-23, 0, Math.PI / 2],
+    [22, 8, Math.PI], [25, 30, Math.PI], [0, 22, Math.PI],
+  ]);
 
   M.routes({
     attack: [
@@ -77,6 +81,11 @@ export function build(scene) {
   M.torch(0, 2.8, -32, 0xffa040);        // tunnel lantern
   M.torch(25, 3.2, 30, 0x9fd8ff);        // reliquary
   M.torch(-23, 2.6, 0, 0x66ff99);        // channel glow
+
+  M.npc('basilisk', {
+    x: 0, z: 24, yaw: Math.PI, hp: 120,
+    range: 30, gazeCd: 4.5, biteRange: 2.3,
+  });
 
   return M.finalize();
 }

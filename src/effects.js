@@ -552,6 +552,14 @@ export class Effects {
     victim.rig?.flash(0xc886ff, 0.45);
   }
 
+  morphFX(victim, kind = 'pig') {
+    const p = victim.pos.clone().add(new THREE.Vector3(0, 0.9, 0));
+    const color = kind === 'pig' ? 0xff8fc8 : 0xffd6ec;
+    this.particles.puff('ring', { pos: p, life: 0.45, size0: 0.35, size1: 2.4, color, alpha0: 0.9, alpha1: 0, additive: true });
+    this.particles.burst({ pos: p, count: 24, color, color2: 0xffffff, speed: 3.2, dirY: 1.0, spread: 1, life: 0.75, size: 0.36, gravity: -1, drag: 2 });
+    victim.rig?.flash(color, 0.5);
+  }
+
   igniteFX(victim) {
     const p = victim.pos.clone().add(new THREE.Vector3(0, 1.0, 0));
     this.particles.puff('flame', { pos: p, life: 0.4, size0: 0.8, size1: 1.8, color: 0xffa050, alpha0: 0.9, alpha1: 0, additive: true });

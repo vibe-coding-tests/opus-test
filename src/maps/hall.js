@@ -52,6 +52,10 @@ export function build(scene) {
   M.site('B', -22, 4, -12, 18);
   M.spawns('death', 0, -59, Math.PI);   // attackers face north up the nave
   M.spawns('order', 0, 37, 0);          // defenders face south
+  M.dmSpawns([
+    [0, -59, Math.PI], [0, 37, 0], [0, -20, 0], [0, 14, Math.PI],
+    [-16, 10, Math.PI / 2], [16, -8, -Math.PI / 2], [0, -44, 0],
+  ]);
 
   M.routes({
     attack: [

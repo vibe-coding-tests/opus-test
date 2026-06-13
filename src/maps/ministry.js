@@ -85,6 +85,10 @@ export function build(scene) {
   M.site('B', 28, -28, 40, -10);
   M.spawns('death', 0, 41, 0);             // visitors' entrance, facing the Atrium
   M.spawns('order', 0, -42, Math.PI);      // by the lifts, facing the gates
+  M.dmSpawns([
+    [0, 41, 0], [0, -42, Math.PI], [0, 0, 0], [-21, 0, -Math.PI / 2],
+    [21, 4, Math.PI / 2], [34, -18, Math.PI], [32, 24, Math.PI], [-6, -38, 0],
+  ]);
 
   M.routes({
     attack: [

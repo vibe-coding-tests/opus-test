@@ -59,6 +59,10 @@ export function build(scene) {
   M.site('B', -14, -52, 14, -42);
   M.spawns('death', -27, 0, -Math.PI / 2);   // attackers face east across the pitch
   M.spawns('order', 24, 0, Math.PI / 2);     // defenders face west (slightly field-side)
+  M.dmSpawns([
+    [-27, 0, -Math.PI / 2], [24, 0, Math.PI / 2], [0, 0, 0], [-20, 28, 0],
+    [20, -28, Math.PI], [0, 46, Math.PI], [0, -46, 0], [-16, 0, -Math.PI / 2],
+  ]);
 
   M.routes({
     attack: [
@@ -77,6 +81,15 @@ export function build(scene) {
   M.torch(26, 2.8, 0, 0xffa040);
   M.torch(0, SY + 1.8, 46, 0xe8543a);
   M.torch(0, SY + 1.8, -46, 0x49e07d);
+
+  M.npc('bludger', {
+    route: [[-24, -30, 2.6], [24, 28, 4.2], [-18, 18, 3.4], [22, -24, 3.9]],
+    speed: 11, hitCd: 1.8,
+  });
+  M.npc('bludger', {
+    route: [[24, -30, 3.5], [-24, 26, 4.8], [16, 14, 2.8], [-20, -22, 4.1]],
+    speed: 10.2, hitCd: 2.0,
+  });
 
   return M.finalize();
 }

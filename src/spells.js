@@ -39,7 +39,7 @@ export class SpellSystem {
   }
 
   canFire(p, spell) {
-    if (!p.alive || p.disarmT > 0 || p.recharging || p.freezeT > 0 || p.silenceT > 0) return false;
+    if (!p.alive || p.disarmT > 0 || p.recharging || p.freezeT > 0 || p.silenceT > 0 || p.morphT > 0) return false;
     if (this.game.time < p.nextCastAt) return false;
     if (spell.charges && (p.charges[spell.id] || 0) <= 0) return false;
     if (p.mana < this.manaCost(p, spell)) return false;
@@ -50,7 +50,7 @@ export class SpellSystem {
   handleCastInput(p, held, dt) {
     const spell = SPELLS[p.curSpell];
     if (!spell) return;
-    if (!p.alive || p.disarmT > 0 || p.recharging || p.shielding) {
+    if (!p.alive || p.disarmT > 0 || p.recharging || p.shielding || p.morphT > 0) {
       this.cancelCharge(p);
       return;
     }
@@ -521,6 +521,12 @@ export class SpellSystem {
     if (sp.freeze) victim.applyFreeze(sp.freeze * (owner.char.id === 'mcgonagall' ? 1.3 : 1), game);
     const dot = owner.disc?.dotMult ?? 1; // Hexer: afflictions tick harder and longer
     if (sp.snare) victim.applySnare(sp.snare * dot, game);
+    if (sp.slow) {
+      if (victim.slowT <= 0.25) game.effects.crucioFX(victim);
+      victim.slowT = Math.max(victim.slowT, sp.slow * dot);
+      if (victim.isHuman) game.hud.notice(`${sp.name.toUpperCase()} — SLOWED!`, 'bad');
+    }
+    if (sp.morph) victim.applyMorph(sp.morph * dot, sp.morphId, game);
     // Umbridge's decrees stick: longer silences
     if (sp.silence) victim.applySilence(sp.silence * dot * (owner.char.id === 'umbridge' ? 1.35 : 1), game);
     if (sp.bleed) victim.bleeds.push({ t: sp.bleed[1] * dot, dps: sp.bleed[0] * owner.effPower() * dot, attacker: owner, spell: sp });

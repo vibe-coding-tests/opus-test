@@ -477,7 +477,7 @@ export class MapBuilder {
     this.scene = scene; // may be null for headless preview
     this.world = new World();
     this.geoByMat = {};
-    this.meta = { sites: {}, routes: {}, torches: [], torchObjs: [], breakables: [], bells: [], theme: themeName };
+    this.meta = { sites: {}, routes: {}, torches: [], torchObjs: [], breakables: [], bells: [], npcs: [], theme: themeName };
     this.group = scene ? new THREE.Group() : null;
   }
 
@@ -696,6 +696,11 @@ export class MapBuilder {
     return this;
   }
 
+  dmSpawns(points) {
+    this.world.dmSpawns = points.map((p) => ({ x: p[0], z: p[1], yaw: p[2] ?? 0 }));
+    return this;
+  }
+
   // CS-style spawn zone marking: team-colored ring per spawn slot + facing chevron
   _spawnPad(team, cx, cz, yaw, spreadR) {
     const info = TEAM_INFO[team];
@@ -739,6 +744,11 @@ export class MapBuilder {
   }
 
   routes(r) { this.meta.routes = r; return this; }
+
+  npc(type, cfg = {}) {
+    this.meta.npcs.push({ type, ...cfg });
+    return this;
+  }
 
   torch(x, y, z, color = 0xffa040) {
     this.meta.torches.push({ x, y, z, color });

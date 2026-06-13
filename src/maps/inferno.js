@@ -58,6 +58,10 @@ export function build(scene) {
   M.site('B', -20, -42, 0, -28);
   M.spawns('death', -42, 32, -Math.PI / 2);  // T face east
   M.spawns('order', 24, -34, Math.PI / 2);   // CT face west
+  M.dmSpawns([
+    [-42, 32, -Math.PI / 2], [24, -34, Math.PI / 2], [-21, 12, Math.PI], [-12, -34, 0],
+    [28, -8, Math.PI], [4, 10, 0], [18, 15, Math.PI / 2],
+  ]);
 
   M.routes({
     attack: [

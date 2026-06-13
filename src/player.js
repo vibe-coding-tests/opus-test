@@ -52,7 +52,7 @@ export class Player {
     this.shieldOnAt = -999; // when the shield was last raised (perfect-block timing)
     this.recharging = 0;
     this.disarmT = 0; this.blindT = 0; this.blindMax = 1; this.slowT = 0;
-    this.snareT = 0; this.silenceT = 0;
+    this.snareT = 0; this.silenceT = 0; this.morphT = 0; this.morphId = null;
     this.bleeds = [];
     this.burnT = 0; this.staggerT = 0; this.freezeT = 0;
     this.feralT = 0;      // Greyback post-kill rush
@@ -207,6 +207,7 @@ export class Player {
     if (this.charge) m *= SPELLS.avada.chargeSlow;
     if (this.slowT > 0) m *= 0.7; // Crucio: 30% slower
     if (this.snareT > 0) m *= 0.55; // Impedimenta: heavy snare
+    if (this.morphT > 0) m *= 0.76; // Porcus: small, panicked scurry
     if (this.recharging > 0) m *= 0.85;
     if (this.flying) m *= EQUIP_EFFECTS.broom.speedMult; // broom
     if (this.body.inWater) m *= 0.62;
@@ -264,8 +265,20 @@ export class Player {
     if (this.isHuman) game.hud.notice('SILENCED — you cannot cast!', 'bad');
   }
 
+  applyMorph(dur, kind, game) {
+    if (!this.alive) return;
+    this.morphT = Math.max(this.morphT, dur);
+    this.morphId = kind || 'pig';
+    game.spells.cancelCharge(this);
+    game.spells.stopShield(this);
+    this.recharging = 0;
+    game.effects.morphFX(this, this.morphId);
+    game.audio.play('jinx', { pos: this.pos, vol: 0.9 });
+    if (this.isHuman) game.hud.notice('POLYMORPHED — no casting!', 'bad');
+  }
+
   hasDebuff() {
-    return this.burnT > 0 || this.bleeds.length > 0 || this.slowT > 0 || this.snareT > 0 || this.blindT > 0.3;
+    return this.burnT > 0 || this.bleeds.length > 0 || this.slowT > 0 || this.snareT > 0 || this.blindT > 0.3 || this.morphT > 0;
   }
 
   useEquip(action) {
@@ -319,6 +332,8 @@ export class Player {
       this.bleeds.length = 0;
       this.slowT = 0;
       this.snareT = 0;
+      this.morphT = 0;
+      this.morphId = null;
       this.blindT = Math.min(this.blindT, 0.25);
       g.effects.cleanseFX(this);
       g.audio.play('cleanse', { pos: this.pos, vol: 0.9 });
@@ -330,7 +345,7 @@ export class Player {
   }
 
   startRecharge() {
-    if (this.recharging > 0 || this.mana >= this.stats.mana - 1 || this.disarmT > 0 || !this.alive) return;
+    if (this.recharging > 0 || this.mana >= this.stats.mana - 1 || this.disarmT > 0 || this.morphT > 0 || !this.alive) return;
     const dur = this.charId === 'hermione' ? 0.7 : 1.4;
     this.recharging = dur;
     this.rechargeDur = dur;
@@ -345,7 +360,7 @@ export class Player {
   tryDash(dirX = null, dirZ = null) {
     const g = this.game;
     if (!this.alive || this.dashCD > 0 || this.dashT > 0) return false;
-    if (this.freezeT > 0 || this.staggerT > 0 || this.snareT > 0 || this.flying || this.portkeyT > 0) return false;
+    if (this.freezeT > 0 || this.staggerT > 0 || this.snareT > 0 || this.morphT > 0 || this.flying || this.portkeyT > 0) return false;
     let dx = dirX, dz = dirZ;
     if (dx === null || dz === null) { dx = this.ctrl.moveX; dz = this.ctrl.moveZ; }
     let l = Math.hypot(dx, dz);
@@ -379,6 +394,8 @@ export class Player {
     this.slowT = Math.max(0, this.slowT - dt);
     this.snareT = Math.max(0, this.snareT - dt);
     this.silenceT = Math.max(0, this.silenceT - dt);
+    this.morphT = Math.max(0, this.morphT - dt);
+    if (this.morphT <= 0) this.morphId = null;
     this.flinchT = Math.max(0, this.flinchT - dt);
     this.burnT = Math.max(0, this.burnT - dt);
     this.staggerT = Math.max(0, this.staggerT - dt);
@@ -455,6 +472,12 @@ export class Player {
         g.particles.burst({
           pos: this.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.25, 1.45, (Math.random() - 0.5) * 0.25)),
           count: 2, color: 0xc886ff, color2: 0xeed4ff, speed: 0.7, dirY: 0.8, spread: 0.6, life: 0.5, size: 0.16, gravity: -0.5, drag: 1,
+        });
+      }
+      if (this.morphT > 0 && Math.random() < 0.65) {
+        g.particles.burst({
+          pos: this.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.45, 0.35 + Math.random() * 0.7, (Math.random() - 0.5) * 0.45)),
+          count: 2, color: 0xff8fc8, color2: 0xffd6ec, speed: 1.2, spread: 0.8, life: 0.42, size: 0.2, gravity: -0.5, drag: 1.6,
         });
       }
     }
@@ -569,8 +592,8 @@ export class Player {
     this.eyeSmooth = damp(this.eyeSmooth, targetEye, 18, dt);
 
     // casting (a petrified body can do neither)
-    g.spells.updateShield(this, c.altHeld && !c.castHeld && this.freezeT <= 0 && this.silenceT <= 0, dt);
-    g.spells.handleCastInput(this, c.castHeld && this.freezeT <= 0 && this.silenceT <= 0, dt);
+    g.spells.updateShield(this, c.altHeld && !c.castHeld && this.freezeT <= 0 && this.silenceT <= 0 && this.morphT <= 0, dt);
+    g.spells.handleCastInput(this, c.castHeld && this.freezeT <= 0 && this.silenceT <= 0 && this.morphT <= 0, dt);
     this.ensureValidSpell();
 
     // rigs
@@ -601,7 +624,7 @@ export class Player {
     this.mana = this.stats.mana;
     this.charge = null; this.shielding = false; this.recharging = 0;
     this.disarmT = 0; this.blindT = 0; this.slowT = 0;
-    this.snareT = 0; this.silenceT = 0;
+    this.snareT = 0; this.silenceT = 0; this.morphT = 0; this.morphId = null;
     this.bleeds.length = 0;
     this.burnT = 0; this.staggerT = 0; this.freezeT = 0; this.lastHit = null;
     this.feralT = 0; this.taggedT = 0; this.taggedBy = null;
@@ -629,6 +652,7 @@ export class Player {
 const SKIN = 0xd9b08c;
 const PALE = 0xe8e4da;
 const STONE = new THREE.Color(0x9aa6b2);
+const PIG = new THREE.Color(0xff9fc8);
 
 // subtle per-champion robe shading applied as an HSL shift on the TEAM color,
 // so a borrowed template (e.g. Ginny on the Bellatrix stat block) still reads
@@ -820,6 +844,22 @@ export class Rig {
         body.add(brow);
       }
     }
+    const pigMat = mat(0xff9fc8);
+    const pigSnout = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), pigMat);
+    pigSnout.position.set(0, 1.61, -0.205);
+    pigSnout.scale.set(1.25, 0.8, 0.8);
+    pigSnout.visible = false;
+    body.add(pigSnout);
+    const pigEarL = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.16, 6), pigMat);
+    pigEarL.position.set(-0.13, 1.76, -0.02);
+    pigEarL.rotation.z = 0.45;
+    pigEarL.visible = false;
+    body.add(pigEarL);
+    const pigEarR = pigEarL.clone();
+    pigEarR.position.x = 0.13;
+    pigEarR.rotation.z = -0.45;
+    body.add(pigEarR);
+    this.pigParts = [pigSnout, pigEarL, pigEarR];
     // hair variants give each champion a silhouette
     if (skin.hair !== null && skin.hair !== undefined) {
       const hairM = mat(skin.hair);
@@ -1369,7 +1409,7 @@ export class Rig {
     this.flashColor = new THREE.Color(0xffffff);
     this._emissiveOn = false;
     this.baseColors = this.mats.map((m) => m.color.clone());
-    this._stoneOn = false;
+    this._tintKey = 'base';
     scene.add(g);
   }
 
@@ -1397,7 +1437,13 @@ export class Rig {
       this.corpse = null;
       this.group.rotation.set(0, 0, 0);
       this.group.position.y = 0;
+      this.group.scale.set(1, 1, 1);
       this.plate.visible = true;
+      if (this.baseColors) {
+        for (let i = 0; i < this.mats.length; i++) this.mats[i].color.copy(this.baseColors[i]);
+        this._tintKey = 'base';
+      }
+      if (this.pigParts) for (const part of this.pigParts) part.visible = false;
     }
   }
 
@@ -1466,10 +1512,14 @@ export class Rig {
       this.armR.rotation.z = -parryK * 0.65;
       if (parryK > 0 && p.disarmT <= 0) this.armR.rotation.x -= parryK * 0.35;
     }
-    this.wand.visible = p.disarmT <= 0;
+    this.wand.visible = p.disarmT <= 0 && p.morphT <= 0;
     // crouch: squash
-    const squash = p.crouching ? 0.72 : 1;
+    const morph = p.morphT > 0;
+    const squash = (p.crouching ? 0.72 : 1) * (morph ? 0.62 : 1);
     g.scale.y = damp(g.scale.y, squash, 14, dt);
+    const sideScale = morph ? 0.86 : 1;
+    g.scale.x = damp(g.scale.x, sideScale, 14, dt);
+    g.scale.z = damp(g.scale.z, sideScale, 14, dt);
     this.relicMesh.visible = p.hasRelic;
     if (p.hasRelic) this.relicMesh.rotation.y += dt * 3;
     // charge spell tell: glow swells at the wand tip
@@ -1492,15 +1542,17 @@ export class Rig {
       g.rotation.x = p.flinchT > 0 ? Math.sin(p.flinchT * 40) * 0.05 : 0;
       g.rotation.z = 0;
     }
-    // petrified: the whole body greys out to stone
-    const stone = p.freezeT > 0;
-    if (stone !== this._stoneOn) {
-      this._stoneOn = stone;
+    // petrified greys to stone; polymorph washes the wizard pink and sprouts pig features
+    const tintKey = p.freezeT > 0 ? 'stone' : morph ? 'pig' : 'base';
+    if (tintKey !== this._tintKey) {
+      this._tintKey = tintKey;
       for (let i = 0; i < this.mats.length; i++) {
         this.mats[i].color.copy(this.baseColors[i]);
-        if (stone) this.mats[i].color.lerp(STONE, 0.78);
+        if (tintKey === 'stone') this.mats[i].color.lerp(STONE, 0.78);
+        else if (tintKey === 'pig') this.mats[i].color.lerp(PIG, 0.72);
       }
     }
+    for (const part of this.pigParts) part.visible = morph && p.freezeT <= 0;
     // cloak transparency
     const game = p.game;
     let op = 1;
@@ -1674,7 +1726,9 @@ export class FPRig {
 
     // disarmed: wand is gone (it's on the floor) — frantic empty-hand search
     const disarmed = p.disarmT > 0;
-    this.wand.visible = !disarmed;
+    const morphed = p.morphT > 0;
+    this.wand.visible = !disarmed && !morphed;
+    this.hand.visible = !morphed;
     if (disarmed) {
       this.panicT += dt;
       const w = this.panicT;
@@ -1683,6 +1737,12 @@ export class FPRig {
       pz = -0.52;
       rx = 0.35 + Math.sin(w * 11) * 0.25;
       rz = Math.sin(w * 7) * 0.35;
+    } else if (morphed) {
+      px = 0.22 + Math.sin(this.bobT * 1.7) * 0.025;
+      py = -0.5 + Math.sin(this.bobT * 2.2) * 0.018;
+      pz = -0.68;
+      rx = 0.12;
+      rz = Math.sin(this.bobT * 3.1) * 0.06;
     }
 
     g.position.set(px, py, pz);

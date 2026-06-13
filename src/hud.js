@@ -919,9 +919,10 @@ export class HUD {
     if (p.disarmT > 0) tags += `<span class="tag bad">DISARMED ${p.disarmT.toFixed(1)}</span>`;
     if (p.recharging > 0) tags += `<span class="tag mana">RECHARGING</span>`;
     if (p.cloakT > 0) tags += `<span class="tag">CLOAKED ${p.cloakT.toFixed(0)}</span>`;
-    if (p.slowT > 0) tags += `<span class="tag bad">CRUCIO</span>`;
+    if (p.slowT > 0) tags += `<span class="tag bad">SLOWED</span>`;
     if (p.burnT > 0) tags += `<span class="tag bad">BURNING</span>`;
     if (p.bleeds.length > 0) tags += `<span class="tag bad">BLEEDING</span>`;
+    if (p.morphT > 0) tags += `<span class="tag bad">PIG ${p.morphT.toFixed(1)}</span>`;
     if (p.freezeT > 0) tags += `<span class="tag bad">PETRIFIED ${p.freezeT.toFixed(1)}</span>`;
     if (p.parryBuffT > 0) tags += `<span class="tag good">FLOW</span>`;
     this.statusEl.innerHTML = tags;
