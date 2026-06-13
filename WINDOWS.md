@@ -14,14 +14,18 @@ node --version
 
 ## 2. Get the game files
 
-Clone the repo:
+**No Git? Just download the ZIP.** On the [GitHub page](https://github.com/char-boomer-remakes/wizard-duel), click the green **Code** button, choose **Download ZIP**, then right-click the file and **Extract All**. That gives you a `wizard-duel` folder — no extra tools needed.
+
+**If you have Git**, clone the repo instead:
 
 ```powershell
 git clone https://github.com/char-boomer-remakes/wizard-duel.git
 cd wizard-duel
 ```
 
-Or copy the project folder over by USB or zip. Leave out `node_modules` when copying from a Mac; the next step rebuilds it for Windows.
+(Don't have Git but want it? Grab it from [git-scm.com](https://git-scm.com/download/win) and run the installer with the defaults.)
+
+Either way, you can also copy the project folder over by USB or zip. Leave out `node_modules` when copying from a Mac; the next step rebuilds it for Windows.
 
 ## 3. Install and play
 
