@@ -937,7 +937,7 @@ export class HUD {
     if (g.mode === 'dm') {
       this.timerEl.textContent = fmtTime(g.dmTimer);
       this.timerEl.classList.remove('planted');
-      this.roundLabel.textContent = 'DEATHMATCH';
+      this.roundLabel.textContent = 'K/D/A · KDA';
     } else if (g.state === 'freeze') {
       this.timerEl.textContent = fmtTime(g.stateT);
       this.timerEl.classList.remove('planted');
@@ -951,8 +951,17 @@ export class HUD {
       this.timerEl.classList.remove('planted');
       this.roundLabel.textContent = `Round ${g.roundNum}`;
     }
-    this.scoreL.textContent = String(g.score.order);
-    this.scoreR.textContent = String(g.score.death);
+    if (g.mode === 'dm') {
+      this.scoreL.textContent = `${p.kills}/${p.deaths}/${p.assists}`;
+      this.scoreR.textContent = fmtKDA(p);
+      this.scoreL.title = 'Kills / Deaths / Assists';
+      this.scoreR.title = 'KDA';
+    } else {
+      this.scoreL.textContent = String(g.score.order);
+      this.scoreR.textContent = String(g.score.death);
+      this.scoreL.title = '';
+      this.scoreR.title = '';
+    }
     const aOrder = g.aliveOf(TEAM.ORDER).length, aDeath = g.aliveOf(TEAM.DEATH).length;
     this.aliveL.innerHTML = `<b>${TEAM_INFO.order.short}</b> ${'●'.repeat(aOrder)}${'○'.repeat(Math.max(0, g.teamPlayers(TEAM.ORDER).length - aOrder))}`;
     this.aliveR.innerHTML = `${'●'.repeat(aDeath)}${'○'.repeat(Math.max(0, g.teamPlayers(TEAM.DEATH).length - aDeath))} <b>${TEAM_INFO.death.short}</b>`;
