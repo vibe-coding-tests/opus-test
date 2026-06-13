@@ -218,11 +218,14 @@ export class HUD {
     const hpRow = el('div', 'bar-row', bl);
     el('div', 'bar-ico', hpRow, '✚');
     const hpBar = el('div', 'bar hp', hpRow);
+    this.hpBar = hpBar;
+    this.hpGhost = el('div', 'bar-ghost', hpBar); // trailing "you just lost this" chunk
     this.hpFill = el('div', 'bar-fill', hpBar);
     this.hpText = el('div', 'bar-text', hpRow, '100');
     const mpRow = el('div', 'bar-row', bl);
     el('div', 'bar-ico mana', mpRow, '✦');
     const mpBar = el('div', 'bar mana', mpRow);
+    this.mpBar = mpBar;
     this.mpFill = el('div', 'bar-fill', mpBar);
     this.mpText = el('div', 'bar-text', mpRow, '100');
     this.moneyEl = el('div', 'money', bl);
@@ -261,6 +264,11 @@ export class HUD {
 
     this.dmgWrap = el('div', 'dmg-numbers', h);
     this.dirWrap = el('div', 'dmg-dirs', h);
+
+    // kill confirmation card
+    this.killCard = el('div', 'kill-card', h);
+    this.killCardIco = el('img', 'kc-ico', this.killCard);
+    this.killCardName = el('span', 'kc-name', this.killCard);
 
     // death screen
     this.deathEl = el('div', 'death-screen hidden', h);
@@ -315,6 +323,34 @@ export class HUD {
     void this.hitm.offsetWidth;
     this.hitm.classList.add('show');
     if (isHS) this.hitm.classList.add('hs');
+  }
+
+  // crosshair confirmation pop — quick inward pulse, gold on headshot/kill
+  crosshairHit(isHS) {
+    if (!this.cross) return;
+    this.cross.classList.remove('ch-hit', 'ch-hs');
+    void this.cross.offsetWidth;
+    this.cross.classList.add(isHS ? 'ch-hs' : 'ch-hit');
+  }
+
+  // HP bar flinch — a quick shake + white flash when you take a direct hit
+  flinchHP() {
+    if (!this.hpBar) return;
+    this.hpBar.classList.remove('hit');
+    void this.hpBar.offsetWidth;
+    this.hpBar.classList.add('hit');
+  }
+
+  // kill card: a brief "ELIMINATED — name" with the finishing spell's icon
+  killConfirm(victim, spell, isHS) {
+    if (!this.killCard) return;
+    this.killCardIco.src = spellIcon(spell?.icon || 'bolt');
+    this.killCardName.textContent = (victim?.name || '').toUpperCase();
+    this.killCard.classList.toggle('hs', !!isHS);
+    this.killCard.classList.remove('show');
+    void this.killCard.offsetWidth;
+    this.killCard.classList.add('show');
+    this.crosshairHit(true);
   }
 
   // ---------------------------------------------------------------- slots ---
@@ -724,12 +760,45 @@ export class HUD {
     const p = g.human;
 
     // vitals
-    this.hpFill.style.width = `${clamp(p.health / p.stats.hp, 0, 1) * 100}%`;
+    const hpFrac = clamp(p.health / p.stats.hp, 0, 1);
+    this.hpFill.style.width = `${hpFrac * 100}%`;
     this.hpFill.classList.toggle('low', p.health < 35);
     this.hpText.textContent = String(Math.max(0, Math.ceil(p.health)));
-    this.mpFill.style.width = `${clamp(p.mana / p.stats.mana, 0, 1) * 100}%`;
+    // ghost bar trails behind: snaps up on heal, drains slowly so the loss reads
+    if (this._hpGhost == null || hpFrac >= this._hpGhost) this._hpGhost = hpFrac;
+    else this._hpGhost = Math.max(hpFrac, this._hpGhost - dt * 0.45);
+    this.hpGhost.style.width = `${this._hpGhost * 100}%`;
+
+    const mpFrac = clamp(p.mana / p.stats.mana, 0, 1);
+    this.mpFill.style.width = `${mpFrac * 100}%`;
     this.mpText.textContent = String(Math.floor(p.mana));
-    this.moneyEl.textContent = g.mode === 'dm' ? '' : `${Math.round(p.money)} ɢ`;
+    // pulse mana the instant the held spell becomes affordable again
+    const curSp = p.curSpell ? SPELLS[p.curSpell] : null;
+    const cost = curSp ? g.spells.manaCost(p, curSp) : 0;
+    const canCast = p.alive && cost > 0 && p.mana >= cost;
+    if (canCast && this._couldCast === false) {
+      this.mpBar.classList.remove('afford');
+      void this.mpBar.offsetWidth;
+      this.mpBar.classList.add('afford');
+    }
+    this._couldCast = canCast;
+
+    // money count-up with a soft tick when it rises (kills, objective rewards)
+    if (g.mode === 'dm') {
+      this.moneyEl.textContent = '';
+    } else {
+      const target = Math.round(p.money);
+      if (this._moneyShown == null || g.state !== 'live') {
+        this._moneyShown = target;
+      } else if (this._moneyShown !== target) {
+        if (target > (this._moneyPrev ?? target)) g.audio.ui('cash');
+        const step = Math.max(1, Math.ceil(Math.abs(target - this._moneyShown) * Math.min(1, dt * 7)));
+        this._moneyShown += Math.sign(target - this._moneyShown) * step;
+        if (Math.abs(target - this._moneyShown) < step) this._moneyShown = target;
+      }
+      this._moneyPrev = target;
+      this.moneyEl.textContent = `${this._moneyShown} ɢ`;
+    }
 
     // status tags
     let tags = '';

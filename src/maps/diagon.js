@@ -60,7 +60,7 @@ export function build(scene) {
   M.box(24, 0, -26, 2.6, 1.0, 2.6, 'crate');                // plant crate B
   // stacked cauldrons (decor)
   for (const [x, z] of [[-2, 24], [6, -16], [22, 24]]) {
-    M.decor('cylinder', x, 0.3, z, { r0: 0.42, r1: 0.34, h: 0.6, color: 0x2e3236 });
+    M.decor('cylinder', x, 0.3, z, { r0: 0.42, r1: 0.34, h: 0.6, color: 0x2e3236, collide: true });
     M.decor('cylinder', x, 0.85, z, { r0: 0.36, r1: 0.28, h: 0.5, color: 0x3a3e44 });
   }
   // gnarled wand-shop sign posts

@@ -25,8 +25,8 @@ export function build(scene) {
   M.box(-6, 0, 14, 1.4, 0.95, 6, 'crate');
   M.box(2, 0, 14, 1.4, 0.95, 6, 'crate');
   M.box(-2, 0, 21, 5, 0.95, 1.4, 'door');        // Snape's desk
-  M.decor('cylinder', -6, 1.3, 11, { r: 0.4, h: 0.7, color: 0x2e4438 }); // cauldrons
-  M.decor('cylinder', 2, 1.3, 17, { r: 0.4, h: 0.7, color: 0x2e4438 });
+  M.decor('cylinder', -6, 1.3, 11, { r: 0.4, h: 0.7, color: 0x2e4438, collide: true }); // cauldrons
+  M.decor('cylinder', 2, 1.3, 17, { r: 0.4, h: 0.7, color: 0x2e4438, collide: true });
   // central vault pillar
   M.pillar(-2, -4, 1.6, 4.2);
   // storeroom barrels

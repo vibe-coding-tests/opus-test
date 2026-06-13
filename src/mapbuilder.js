@@ -576,8 +576,16 @@ export class MapBuilder {
     return this;
   }
 
-  // non-colliding decorative mesh (cylinder/ring/cone) added straight to the group
+  // decorative mesh (cylinder/ring/cone). Visual-only by default; pass
+  // { collide: true } to give a solid prop an upright AABB footprint so players
+  // can't walk through it. Rings stay walk-through (a box would seal the middle).
+  // The collider is registered before the scene guard so headless sims match.
   decor(kind, x, y, z, opts = {}) {
+    if (opts.collide && kind !== 'ring') {
+      const r = Math.max(opts.r ?? 0, opts.r0 ?? 0, opts.r1 ?? 0) || 0.4;
+      const h = opts.h ?? (kind === 'cone' ? 1.6 : 3);
+      this.world.addBox(x - r, Math.max(0, y - h / 2), z - r, x + r, y + h / 2, z + r, 'prop');
+    }
     if (!this.scene) return this;
     const color = opts.color ?? 0x8a8a8a;
     let geo;

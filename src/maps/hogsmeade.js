@@ -33,7 +33,7 @@ export function build(scene) {
   M.box(-22, 0, 16, 1.6, 1.0, 9, 'crate');              // the bar
   M.crate(-14, 10, 1.2);
   M.crate(-16, 24, 1.2);
-  M.decor('cylinder', -22, 1.4, 12, { r: 0.45, h: 0.8, color: 0x7a5a30 }); // butterbeer barrel
+  M.decor('cylinder', -22, 1.4, 12, { r: 0.45, h: 0.8, color: 0x7a5a30, collide: true }); // butterbeer barrel
   // shop clutter
   M.crate(-18, -18, 1.3);
   M.crate(16, -22, 1.3);
@@ -57,7 +57,7 @@ export function build(scene) {
   M.bell(0, 5.0, 2);
   // snow-laden firs along the lanes (decor only)
   for (const [x, z] of [[-30, -32], [-31, 34], [28, -32], [13, 40], [-13, -40], [29, 6]]) {
-    M.decor('cylinder', x, 0.8, z, { r: 0.18, h: 1.6, color: 0x4a3a26 });
+    M.decor('cylinder', x, 0.8, z, { r: 0.3, h: 1.6, color: 0x4a3a26, collide: true }); // solid trunk
     M.decor('cone', x, 2.6, z, { r: 1.3, h: 2.6, color: 0x2e4a3a });
     M.decor('cone', x, 3.8, z, { r: 0.9, h: 1.8, color: 0x3a5a46 });
   }

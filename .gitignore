@@ -2,4 +2,5 @@ node_modules/
 dist/
 .pw-browsers/
 shots/
+**/.shots/
 .DS_Store

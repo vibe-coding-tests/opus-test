@@ -4,7 +4,7 @@ import { clamp } from './utils.js';
 
 const EPS = 0.001;
 export const GRAV = 20;
-export const JUMP_V = 6.4;
+export const JUMP_V = 7.0;
 export const STEP_H = 0.56;
 export const PLAYER_HALF = 0.36;
 export const STAND_H = 1.8;

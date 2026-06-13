@@ -34,7 +34,7 @@ export function build(scene) {
 
   // Fountain of Magical Brethren: shallow pool you can wade (and get ambushed in)
   M.water(-5, -5, 5, 5, 0.32);
-  M.decor('cylinder', 0, 0.5, 0, { r0: 1.1, r1: 1.4, h: 1.0, color: 0xb89a48 });   // plinth
+  M.decor('cylinder', 0, 0.5, 0, { r0: 1.1, r1: 1.4, h: 1.0, color: 0xb89a48, collide: true });   // plinth (statues sit on top)
   M.decor('cone', 0, 1.9, 0, { r: 0.55, h: 1.8, color: 0xc9a94e });                // the wizard
   M.decor('cone', 0.9, 1.5, 0.4, { r: 0.4, h: 1.2, color: 0xc9a94e });             // the witch
   M.decor('cone', -0.9, 1.4, 0.4, { r: 0.38, h: 1.0, color: 0xc9a94e });           // the centaur
@@ -65,7 +65,7 @@ export function build(scene) {
   M.crate(30, -26, 1.3);
   M.crate(38, -10, 1.2);
   M.box(33, 0, -16, 2.6, 1.0, 2.6, 'crate');                 // plant crate B
-  M.decor('cylinder', 29, 1.1, -10, { r: 0.8, h: 2.2, color: 0x3a5a4a });          // the tank
+  M.decor('cylinder', 29, 1.1, -10, { r: 0.8, h: 2.2, color: 0x3a5a4a, collide: true });          // the tank
   // service corridor clutter
   M.crate(32, 20, 1.2);
   M.crate(32, 2, 1.2);

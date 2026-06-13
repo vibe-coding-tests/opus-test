@@ -266,6 +266,36 @@ button { font-family: inherit; cursor: pointer; }
   animation: pulse 1.6s infinite;
 }
 
+/* loading curtain — hides the one-time world-build / shader-compile hitch */
+.load-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(1000px 600px at 50% 0%, rgba(86, 70, 160, 0.22), transparent 60%),
+    linear-gradient(180deg, #0a0c13, #06070c 60%, #04050a);
+  z-index: 60; pointer-events: auto;
+}
+.load-box { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.load-ring {
+  width: 64px; height: 64px; border-radius: 50%;
+  border: 3px solid rgba(217, 164, 65, 0.18);
+  border-top-color: var(--gold);
+  box-shadow: 0 0 26px rgba(217, 164, 65, 0.28);
+  /* transform animation runs on the compositor → keeps spinning through the
+     synchronous build that briefly blocks the main thread */
+  animation: load-spin 0.9s linear infinite;
+  will-change: transform;
+}
+@keyframes load-spin { to { transform: rotate(360deg); } }
+.load-title {
+  font-size: 22px; letter-spacing: 4px; font-weight: 900; color: var(--gold);
+  text-shadow: 0 0 18px rgba(217, 164, 65, 0.4);
+}
+.load-sub {
+  font-size: 12.5px; letter-spacing: 2px; text-transform: uppercase;
+  color: rgba(230, 235, 245, 0.55);
+}
+
 .end-screen { align-items: center; text-align: center; }
 .end-title { font-size: 56px; font-weight: 900; letter-spacing: 8px; }
 .end-title.good { color: var(--death); text-shadow: 0 0 40px rgba(73, 224, 125, 0.4); }
@@ -294,6 +324,37 @@ button { font-family: inherit; cursor: pointer; }
 .hitmarker.show { animation: hitm 0.22s ease-out; }
 .hitmarker.hs .hm-line { background: #ffd24a; }
 @keyframes hitm { 0% { opacity: 1; transform: scale(1.25); } 100% { opacity: 0; transform: scale(0.8); } }
+/* crosshair confirmation pop — scale punch on hit, gold flash on headshot/kill */
+.crosshair.ch-hit { animation: chpop 0.18s ease-out; }
+.crosshair.ch-hs { animation: chpop-hs 0.24s ease-out; }
+@keyframes chpop { 0% { transform: scale(1.45); } 55% { transform: scale(0.9); } 100% { transform: scale(1); } }
+@keyframes chpop-hs {
+  0% { transform: scale(1.75); filter: drop-shadow(0 0 5px #ffd24a) brightness(1.6); }
+  55% { transform: scale(0.88); }
+  100% { transform: scale(1); filter: none; }
+}
+
+/* kill confirmation card */
+.kill-card {
+  position: absolute; left: 50%; top: 57%; transform: translate(-50%, 0);
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 14px 5px 7px; border-radius: 999px;
+  background: rgba(10, 12, 20, 0.5); border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  opacity: 0; pointer-events: none; z-index: 9;
+  font-weight: 900; letter-spacing: 1px; font-size: 14px;
+}
+.kc-ico { width: 22px; height: 22px; }
+.kc-name { color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.kill-card.hs { border-color: rgba(255, 210, 74, 0.6); box-shadow: 0 0 18px rgba(255, 200, 70, 0.35); }
+.kill-card.hs .kc-name { color: #ffd24a; }
+.kill-card.show { animation: killcard 1.3s ease-out; }
+@keyframes killcard {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.92); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  78% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -4px) scale(1); }
+}
 
 .blind-overlay { position: absolute; inset: 0; background: #fff; opacity: 0; z-index: 30; }
 .pain-overlay {
@@ -379,11 +440,31 @@ button { font-family: inherit; cursor: pointer; }
 .bar-row { display: flex; align-items: center; gap: 10px; }
 .bar-ico { width: 20px; text-align: center; color: var(--hp); font-size: 15px; text-shadow: 0 0 8px rgba(228, 86, 74, 0.7); }
 .bar-ico.mana { color: var(--mana); text-shadow: 0 0 8px rgba(88, 166, 255, 0.7); }
-.bar { flex: 1; height: 9px; background: rgba(6, 8, 14, 0.72); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 999px; overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 999px; transition: width 0.12s; }
+.bar { position: relative; flex: 1; height: 9px; background: rgba(6, 8, 14, 0.72); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 999px; overflow: hidden; }
+.bar-fill { position: relative; z-index: 1; height: 100%; border-radius: 999px; transition: width 0.12s; }
 .bar.hp .bar-fill { background: linear-gradient(90deg, #c23a30, #ff7a59); box-shadow: 0 0 10px rgba(255, 110, 80, 0.55); }
 .bar.hp .bar-fill.low { background: linear-gradient(90deg, #8a1410, #e4291c); animation: pulse 0.7s infinite; }
 .bar.mana .bar-fill { background: linear-gradient(90deg, #2d6fc2, #6fc4ff); box-shadow: 0 0 10px rgba(95, 175, 255, 0.5); }
+/* ghost bar: trailing chunk that shows the slice you just lost */
+.bar-ghost { position: absolute; left: 0; top: 0; z-index: 0; height: 100%; border-radius: 999px; }
+.bar.hp .bar-ghost { background: linear-gradient(90deg, rgba(255, 190, 170, 0.7), rgba(255, 225, 205, 0.85)); }
+.bar.mana .bar-ghost { background: rgba(150, 200, 255, 0.45); }
+/* HP flinch on direct hit */
+.bar.hp.hit { animation: hpflinch 0.3s ease-out; }
+@keyframes hpflinch {
+  0% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,255,255,0); }
+  15% { transform: translateX(-3px); box-shadow: 0 0 12px rgba(255, 120, 100, 0.9); }
+  35% { transform: translateX(2px); }
+  55% { transform: translateX(-1px); }
+  100% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,255,255,0); }
+}
+/* mana "you can cast now" pulse */
+.bar.mana.afford .bar-fill { animation: manaafford 0.45s ease-out; }
+@keyframes manaafford {
+  0% { box-shadow: 0 0 10px rgba(95, 175, 255, 0.5); filter: brightness(1); }
+  30% { box-shadow: 0 0 18px rgba(140, 210, 255, 1); filter: brightness(1.6); }
+  100% { box-shadow: 0 0 10px rgba(95, 175, 255, 0.5); filter: brightness(1); }
+}
 .bar-text { width: 44px; font-weight: 900; font-size: 19px; font-variant-numeric: tabular-nums; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
 .money { color: var(--gold); font-weight: 900; font-size: 17px; letter-spacing: 1px; text-shadow: 0 0 10px rgba(217, 164, 65, 0.4); }
 .status-tags { display: flex; gap: 6px; min-height: 20px; flex-wrap: wrap; }

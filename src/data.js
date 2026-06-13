@@ -41,9 +41,9 @@ export const SPELLS = {
   },
   avada: {
     id: 'avada', name: 'Avada Kedavra', kind: 'bolt', slot: 2, icon: 'skull',
-    dmg: 250, interval: 1.55, charge: 1.35, speed: 78, mana: 55, spread: [0.04, 5.2],
+    dmg: 250, interval: 1.55, charge: 1.5, speed: 64, mana: 55, spread: [0.04, 5.2],
     recoil: 0.058, bloom: 0, zoom: 0.55,
-    falloff: null, hs: 1, kb: 3.7, killReward: 150, price: 5400, chargeSlow: 0.52, // hs 1: it kills on ANY contact — no headshot math needed
+    falloff: null, hs: 1, kb: 3.7, killReward: 150, price: 5400, chargeSlow: 0.52, // hs 1: it kills on ANY contact — no headshot math needed; slower bolt + longer charge make it dodgeable
     color: 0x37ff6e, glow: 0xa9ffc4,
     role: 'AWP', desc: 'Hold to charge — your focus narrows (scope) — release the Killing Curse. One hit, loud and expensive.',
   },
@@ -57,11 +57,11 @@ export const SPELLS = {
   },
   expelliarmus: {
     id: 'expelliarmus', name: 'Expelliarmus', kind: 'bolt', slot: 3, icon: 'swirl',
-    dmg: 3, interval: 0.95, speed: 58, mana: 16, spread: [0.38, 2.1],
+    dmg: 14, interval: 0.8, speed: 62, mana: 12, spread: [0.3, 2.0],
     recoil: 0.011, bloom: 0.28,
-    falloff: null, hs: 1, kb: 1.8, disarm: 2.2, killReward: 300, price: 0,
+    falloff: null, hs: 1, kb: 2.8, disarm: 2.6, killReward: 300, price: 0,
     color: 0xffb347, glow: 0xffe2ad,
-    role: 'Utility', desc: 'Knocks the wand away: target cannot cast for 2.2s unless they recover it.',
+    role: 'Utility', desc: 'Snaps the wand away and shoves them back: no casting for 2.6s unless they scramble to recover it. Chips on contact.',
   },
   petrificus: {
     id: 'petrificus', name: 'Petrificus Totalus', kind: 'bolt', slot: 3, icon: 'bind',
@@ -411,7 +411,7 @@ export function aiProfile(axes) {
     counterStrafe: am > 0.45,          // stop to shoot accurately
     // --- senses: seeing and hearing like a person ---
     fovDot: lerp(0.42, 0.12, se),      // cos of half-FOV (~130° → ~166°)
-    sightDist: lerp(38, 92, se),
+    sightDist: lerp(38, 74, se),
     noticeMul: lerp(0.55, 2.6, se),    // recognition speed multiplier
     hear: lerp(10, 36, se),            // hearing radius baseline (m)
     cloakEye: lerp(2.5, 5.5, se),      // distance at which a cloak shimmer registers

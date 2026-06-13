@@ -536,7 +536,10 @@ export class Player {
       climbF: c.climbF, pitch: this.pitch, fly: this.flying, flyY,
     }, dt);
     this.horizSpeed = Math.hypot(this.vel.x, this.vel.z);
-    if (ev.landed > 3) g.audio.play('land', { pos: this.pos, vol: clamp(ev.landed / 9, 0.2, 1) });
+    if (ev.landed > 3) {
+      g.audio.play('land', { pos: this.pos, vol: clamp(ev.landed / 9, 0.2, 1) });
+      if (this.isHuman) g.feedback.land(ev.landed); // camera dip on touchdown
+    }
 
     // footsteps (crouching or walking is silent — bots can't hear you)
     if (this.body.onGround && this.horizSpeed > 2) {

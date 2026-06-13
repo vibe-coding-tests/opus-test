@@ -366,6 +366,17 @@ export class Bot {
       if (!enemy) return;
     }
 
+    // RELIC CARRIER: planting is the mission. Don't get pulled into a long-range
+    // duel — only stop for a close, direct threat; otherwise keep pushing to the
+    // site so objective() can walk us on and plant it.
+    if (enemy && p.hasRelic) {
+      const dCarry = enemy.eyePos().distanceTo(p.eyePos());
+      if (dCarry > 13 && p.health > 45) {
+        this.aimYaw = yawTo(p.eyePos(), enemy.eyePos());
+        enemy = null;
+      }
+    }
+
     if (enemy) {
       this.engage(enemy);
       return;
@@ -750,6 +761,24 @@ export class Bot {
       if (spell.kind === 'lob') this.aimPitch += clamp(dist * 0.02, 0.08, 0.5);
     }
 
+    // ---- range discipline: close the gap, don't plink across the map ----
+    // Snipers reach out; everyone else has a real fighting distance. Beyond it
+    // an attacker/roamer PUSHES (pathing through cover) instead of freezing in a
+    // long-range staring contest — the thing that made high-skill bots feel
+    // passive and statue-like. Defenders hold their angle and wait for range.
+    const sniper = useAvada || p.curSpell === 'avada';
+    const fireRange = sniper ? 220 : (spell.kind === 'lob' ? 34 : 42);
+    const commitRange = sniper ? 220 : ai.range * 1.5 + 6;
+    if (dist > commitRange && this.role.type !== 'defend' && this.retreating <= 0 &&
+        p.health > 32 && spell.kind !== 'lob' && !p.charge && g.time >= this.dodgeUntil) {
+      ctrl.castHeld = false;
+      this.charging = false;
+      this.aimYaw = yawTo(eye, ep);
+      this.aimPitch = clamp(Math.atan2(ep.y - eye.y, Math.max(dist, 0.01)), -0.4, 0.4);
+      this.goTo(enemy.pos.x, enemy.pos.y, enemy.pos.z, 4);
+      return;
+    }
+
     // ---- the trigger: gated by the reaction pipeline and a fire cone ----
     const ready = oriented && g.time >= this.reactAt && p.blindT <= 0.4;
     const onTarget = Math.abs(angDiff(p.yaw, this.aimYaw)) < 9 * DEG;
@@ -768,7 +797,7 @@ export class Bot {
         this.headIntent = Math.random() < sk.headBias;
         if (Math.random() < 0.35) this.leadBias = grand();
       }
-      ctrl.castHeld = this.burstT > 0 && onTarget && p.disarmT <= 0;
+      ctrl.castHeld = this.burstT > 0 && onTarget && p.disarmT <= 0 && dist < fireRange;
     }
 
     // emergency protego (wardens hold it longer, it costs them less): commit to

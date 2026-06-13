@@ -160,6 +160,7 @@ export class SpellSystem {
     this.game.audio.play(sfxName, { pos: origin, vol: p.isHuman ? 0.85 : 0.7 });
     this.game.effects.muzzle(origin, spell);
     p.onCastAnim?.(spell);
+    if (p.isHuman) this.game.feedback.cast(spell); // camera push + bloom on heavy casts
     this.game.noise(p, 18); // bots can hear casts
     if (spell.id === 'avada') this.game.particles.flashLight(origin, spell.color, 25, 0.25, 14);
   }
@@ -373,7 +374,7 @@ export class SpellSystem {
           // reward the read: refund mana, grant a brief flow surge, make it cinematic
           hitPlayer.mana = Math.min(hitPlayer.stats.mana, hitPlayer.mana + 25);
           hitPlayer.parryBuffT = 2.0;
-          if (hitPlayer.isHuman || caster.isHuman) { game.hitstop(0.05); game.slowmo(0.5, 0.35); }
+          if (hitPlayer.isHuman || caster.isHuman) { game.hitstop(0.05); game.slowmo(0.5, 0.35); game.feedback.bloomPulse(0.6); }
           if (hitPlayer.isHuman) game.hud.notice('PERFECT BLOCK — curse reflected!', 'good');
           continue; // projectile lives on, flying back
         }

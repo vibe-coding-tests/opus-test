@@ -11,6 +11,7 @@ import { Environment } from './env.js';
 import { SpellSystem } from './spells.js';
 import { Player, Rig, FPRig } from './player.js';
 import { Bot } from './bot.js';
+import { Feedback } from './feedback.js';
 import { clamp, rand, choice, shuffle, yawTo } from './utils.js';
 
 export class Game {
@@ -23,6 +24,7 @@ export class Game {
     this.input = app.input;
     this.hud = app.hud;
     this.settings = app.settings;
+    this.postfx = app.postfx || null;
 
     this.mode = setup.mode; // 'relic' | 'dm'
     this.dmBanned = new Set(setup.dmBanned || []);
@@ -68,13 +70,14 @@ export class Game {
     this.teamMemory = { order: new Map(), death: new Map() };
     this.recentDeaths = []; // {team, x, y, z, killerX, killerZ, t} — bots trade off these
     this.relic = { state: 'idle', carrier: null, pos: new THREE.Vector3(), fuseT: 0, planter: null, plantProgress: 0, defuseProgress: 0, defuser: null, beepT: 0, warned: false };
-    this.shakeT = 0; this.shakeAmp = 0;
+    this.feedback = new Feedback(this); // trauma shake, camera kicks, bloom swells
     // cinematic time control: hitstop freezes the sim for a beat; slow-mo
     // stretches the marquee moments. Disabled under ?auto so tests stay exact.
     this.timeScale = 1; this.hitstopT = 0; this.slowmoT = 0; this.slowmoScale = 1;
     this.autoMode = (typeof location !== 'undefined' && new URLSearchParams(location.search).has('auto'));
     this.spectIdx = 0;
     this.deathCamT = 0;
+    this.specActive = false; // death overlay cleared, now showing the spectate view
     this.summons = [];   // conjured serpents
     this.drops = [];     // lootable items from the fallen
     this.radioT = 0;     // teammate callout rate limiter
@@ -402,6 +405,7 @@ export class Game {
       victim.hitLog.set(attacker.id, { dmg: (log?.dmg || 0) + dealt, t: this.time });
       if (attacker.isHuman && !silent) {
         this.hud.hitmarker(isHS);
+        this.hud.crosshairHit(isHS);
         this.audio.play(isHS ? 'headshot' : 'hitmarker', { vol: 0.9 });
       }
       if (attacker.isHuman && hitPos) this.hud.damageNumber(hitPos, Math.round(dealt), isHS);
@@ -412,7 +416,15 @@ export class Game {
     }
     if (victim.isHuman) {
       this.hud.painFlash(clamp(amount / 60, 0.15, 0.8));
-      if (attacker && attacker !== victim) this.hud.damageDirection(attacker.pos, victim);
+      let lateral = 0;
+      if (attacker && attacker !== victim) {
+        this.hud.damageDirection(attacker.pos, victim);
+        const f = victim.lookDir(); f.y = 0; f.normalize();
+        let dx = attacker.pos.x - victim.pos.x, dz = attacker.pos.z - victim.pos.z;
+        const dl = Math.hypot(dx, dz) || 1;
+        lateral = (-f.z) * (dx / dl) + f.x * (dz / dl); // >0: hit came from the right
+      }
+      if (!silent) { this.feedback.hit(amount, lateral); this.hud.flinchHP(amount); }
       this.audio.play('hurt', { vol: 0.7 });
     }
     if (victim.health <= 0) this.kill(victim, attacker || victim, spell, isHS);
@@ -488,7 +500,12 @@ export class Game {
         this.effects.healFX(attacker);
         if (attacker.isHuman) this.hud.notice('THE HUNGER — +30 HP, speed surge', 'good');
       }
-      if (attacker.isHuman) { this.audio.ui('kill'); this.hitstop(0.05); }
+      if (attacker.isHuman) {
+        this.audio.ui('kill');
+        this.hitstop(0.05);
+        this.hud.killConfirm(victim, spell, isHS);
+        this.feedback.bloomPulse(0.4);
+      }
 
       if (this.mode !== 'dm') {
         // first blood bounty
@@ -520,6 +537,7 @@ export class Game {
     if (victim.isHuman) {
       this.deathCamT = 2.2;
       this.spectIdx = 0;
+      this.specActive = false;
       this.hud.openBuy(false); // died mid-purchase: close the shop
       this.hud.showDeath(selfKill ? null : attacker, spell);
     }
@@ -626,6 +644,7 @@ export class Game {
       this.damage(p, attacker, dmg, spell, false, c);
     }
     this.shakeByDistance(pos, radius * 2.4);
+    this.feedback.bloomPulse(0.5);
   }
 
   flashPlayers(pos, spell) {
@@ -888,8 +907,7 @@ export class Game {
   }
 
   shake(amp) {
-    this.shakeAmp = Math.max(this.shakeAmp, amp);
-    this.shakeT = 0.4;
+    this.feedback.addTrauma(amp * 0.62); // map legacy 0..1.6 amps into trauma
   }
 
   // Cinematic time. hitstop freezes the whole sim for a beat (impact crunch);
@@ -1115,7 +1133,12 @@ export class Game {
       if (avg > 0.0185) this.particles.setQuality(Math.max(0.25, q - 0.2));
       else if (avg < 0.0135 && q < 1) this.particles.setQuality(Math.min(1, q + 0.12));
       this.fpsAcc = 0; this.fpsN = 0; this.qualT = 0;
+      // bloom is the first thing to drop under sustained load
+      this.postfx?.setGovernor(this.particles.quality <= 0.4);
     }
+
+    this.feedback.update(realDt); // shake/kick springs run on real time
+
 
     // cinematic time: a hitstop freezes the sim, then slow-mo eases it back in
     let scale = 1;
@@ -1325,6 +1348,10 @@ export class Game {
         const mates = this.players.filter((q) => q.alive && q.team === p.team);
         const pool = mates.length ? mates : (this.mode === 'dm' ? this.players.filter((q) => q.alive && q !== p) : []);
         if (pool.length) {
+          // death cam is over — drop the full-screen "SLAIN" overlay so the
+          // spectated teammate is actually visible (it was blurring the view
+          // until the player happened to click)
+          if (!this.specActive) { this.hud.closeDeath(); this.specActive = true; }
           const s = pool[this.spectIdx % pool.length];
           target = s.eyePos();
           yaw = s.yaw; pitch = s.pitch;
@@ -1353,15 +1380,8 @@ export class Game {
       cam.updateProjectionMatrix();
     }
     this.hud.setScope(zoomFrac);
-    // screen shake
-    if (this.shakeT > 0) {
-      this.shakeT -= dt;
-      const a = this.shakeAmp * (this.shakeT / 0.4) * 0.05;
-      cam.position.x += rand(-a, a);
-      cam.position.y += rand(-a, a);
-      cam.rotation.z += rand(-a, a) * 0.6;
-      if (this.shakeT <= 0) this.shakeAmp = 0;
-    }
+    // trauma shake + camera-feel kicks (landing dip, cast push, hit flinch)
+    this.feedback.applyToCamera(cam, p.alive);
   }
 
   dispose() {

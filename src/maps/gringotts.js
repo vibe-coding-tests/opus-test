@@ -68,11 +68,12 @@ export function build(scene) {
   M.crate(0, -42, 1.2, VY);                                  // tunnel crate
   M.decor('cylinder', -41.2, VY + 2.2, -40, { r: 2.2, h: 0.5, color: 0x8a8478, rz: Math.PI / 2 }); // the round vault door
   M.decor('ring', -40.8, VY + 2.2, -40, { r: 1.5, tube: 0.12, color: 0xc09a3e, ry: Math.PI / 2 });
+  M.box(-41.2, VY, -40, 0.6, 4.4, 4.4, 'metal');            // the vault door is solid — no walking through it
   // cart rails down the tunnel (decor)
   for (let x = -10; x <= 12; x += 4) {
     M.decor('cylinder', x, VY + 0.06, -39, { r: 0.05, h: 3.6, color: 0x4a4640, rx: Math.PI / 2, ry: Math.PI / 2 });
   }
-  M.decor('cylinder', 6, VY + 0.5, -40.5, { r0: 0.5, r1: 0.7, h: 0.9, color: 0x5a5048 });           // a parked cart
+  M.decor('cylinder', 6, VY + 0.5, -40.5, { r0: 0.5, r1: 0.7, h: 0.9, color: 0x5a5048, collide: true });           // a parked cart
 
   // volatile vapors in iron drums — goblin security doesn't label things
   M.barrel(10, 34);

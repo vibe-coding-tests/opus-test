@@ -506,6 +506,32 @@ export class Menus {
     juiceChk.checked = s.juice !== false;
     juiceChk.onchange = () => { s.juice = juiceChk.checked; this.ctx.applySettings(); this.ctx.saveSettings(); };
 
+    // --- feel & effects (juice + accessibility) ---
+    el('h3', 'sec-title', scroll, 'FEEL & EFFECTS');
+    const feel = el('div', 'opts-grid wide', scroll);
+    const fSlider = (label, get, set, min, max, step, fmt) => {
+      const row = el('div', 'opt-row', feel);
+      el('label', '', row, label);
+      const inp = el('input', '', row);
+      inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step;
+      inp.value = get();
+      const val = el('span', 'opt-val', row, fmt(get()));
+      inp.oninput = () => { set(Number(inp.value)); val.textContent = fmt(get()); this.ctx.applySettings(); this.ctx.saveSettings(); };
+    };
+    const fCheck = (label, get, set) => {
+      const row = el('div', 'opt-row', feel);
+      el('label', '', row, label);
+      const chk = el('input', '', row);
+      chk.type = 'checkbox';
+      chk.checked = get();
+      chk.onchange = () => { set(chk.checked); this.ctx.applySettings(); this.ctx.saveSettings(); };
+    };
+    fCheck('Bloom glow', () => s.bloom !== false, (v) => (s.bloom = v));
+    fSlider('Bloom strength', () => s.bloomStrength ?? 1, (v) => (s.bloomStrength = v), 0, 2, 0.05, (v) => `${Math.round(v * 100)}%`);
+    fSlider('Screen shake', () => s.shake ?? 1, (v) => (s.shake = v), 0, 1.5, 0.05, (v) => `${Math.round(v * 100)}%`);
+    fCheck('Reduce flashing', () => !!s.reduceFlash, (v) => (s.reduceFlash = v));
+    fCheck('Reduce motion', () => !!s.reduceMotion, (v) => (s.reduceMotion = v));
+
     // crosshair editor
     el('h3', 'sec-title', scroll, 'CROSSHAIR');
     const chWrap = el('div', 'ch-editor', scroll);
@@ -626,6 +652,22 @@ export class Menus {
     } else if (!show && this.lockEl) {
       this.lockEl.remove();
       this.lockEl = null;
+    }
+  }
+
+  // Loading curtain over the one-time world build / shader-compile hitch.
+  // The spinner animates on the compositor, so it keeps moving during the
+  // synchronous build that briefly freezes the main thread.
+  showLoading(show) {
+    if (show && !this.loadEl) {
+      this.loadEl = el('div', 'load-overlay', this.root);
+      const box = el('div', 'load-box', this.loadEl);
+      el('div', 'load-ring', box);
+      el('div', 'load-title', box, 'ENTERING THE DUEL');
+      el('div', 'load-sub', box, 'conjuring the arena…');
+    } else if (!show && this.loadEl) {
+      this.loadEl.remove();
+      this.loadEl = null;
     }
   }
 

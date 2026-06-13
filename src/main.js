@@ -1,5 +1,9 @@
 // Boot: renderer, settings persistence, menu/game lifecycle, main loop.
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import './style.css';
 import { AudioEngine } from './audio.js';
 import { Input } from './input.js';
@@ -14,6 +18,12 @@ const DEFAULT_SETTINGS = {
   showFps: false,
   juice: true, // cinematic hitstop + slow-mo on the big moments
   performanceMode: false,
+  // --- Feel layer (juice / spectacle / accessibility) ---
+  bloom: true,        // glow post-processing on emissive magic
+  bloomStrength: 1.0, // 0..2 user multiplier on top of the base bloom
+  shake: 1.0,         // screen-shake intensity (0 = off, 1.5 = max)
+  reduceFlash: false, // cap strobe/flash + bloom swells (photosensitivity)
+  reduceMotion: false, // tone down camera kicks / count-ups
   crosshair: { color: '#7dffa0', size: 7, gap: 4, thickness: 2, dot: false },
   binds: null,
   lastSetup: null,
@@ -39,8 +49,8 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 function applyRenderScale() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.performanceMode ? 1.0 : 1.35));
   renderer.setSize(window.innerWidth, window.innerHeight);
+  postfx.resize();
 }
-applyRenderScale();
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // filmic response: glows bloom, darks stay rich
 renderer.toneMappingExposure = 1.18;
 appEl.appendChild(renderer.domElement);
@@ -48,6 +58,52 @@ appEl.appendChild(renderer.domElement);
 let scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.08, 600);
 scene.add(camera);
+
+// ------------------------------------------------------------- post-processing ---
+// Thresholded bloom turns the additive spell cores / charge tips / fire / wards
+// into real glow. Tone mapping moves to the OutputPass so it's applied once after
+// bloom. The Feel settings + the game's quality governor can switch it off.
+const postfx = {
+  composer: null, renderPass: null, bloom: null, output: null,
+  enabled: settings.bloom !== false,
+  govOff: false,        // forced off by the perf governor under load
+  base: 0.85,           // base bloom strength
+  swell: 0,             // transient event swell (Avada, parry, blast)
+  build() {
+    this.composer = new EffectComposer(renderer);
+    this.renderPass = new RenderPass(scene, camera);
+    this.composer.addPass(this.renderPass);
+    this.bloom = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      this.base, 0.6, 0.82, // strength, radius, threshold (only bright magic blooms)
+    );
+    this.composer.addPass(this.bloom);
+    this.output = new OutputPass();
+    this.composer.addPass(this.output);
+    this.resize();
+  },
+  setScene(sc) { if (this.renderPass) this.renderPass.scene = sc; },
+  on() { return this.enabled && !this.govOff && this.composer; },
+  pulse(a) { if (this.on()) this.swell = Math.min(2.2, this.swell + a); },
+  setGovernor(off) { this.govOff = off; },
+  apply() { this.enabled = settings.bloom !== false; },
+  resize() {
+    if (!this.composer) return;
+    this.composer.setPixelRatio(renderer.getPixelRatio());
+    this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.bloom?.setSize(window.innerWidth, window.innerHeight);
+  },
+  update(dt) {
+    this.swell = Math.max(0, this.swell - dt * 3.2);
+    if (this.bloom) this.bloom.strength = (this.base + this.swell) * (settings.bloomStrength ?? 1);
+  },
+  render() {
+    if (this.on()) this.composer.render();
+    else renderer.render(scene, camera);
+  },
+};
+postfx.build();
+applyRenderScale();
 
 function applyFov() {
   // settings.fov is horizontal: convert to vertical for the current aspect
@@ -83,6 +139,7 @@ function saveSettings() {
 
 function applySettings() {
   audio.setVolume(settings.volume);
+  postfx.apply();
   applyRenderScale();
   applyFov();
   hud.applyCrosshair();
@@ -94,28 +151,51 @@ const menus = new Menus(uiEl, {
   startGame, quitToMenu, resumeGame,
 });
 
-function startGame(setup, { requestLock = true } = {}) {
+function startGame(setup, { requestLock = true, loading = true } = {}) {
   disposeGame();
   audio.ensure();
   input.lockEnabled = requestLock;
-  scene = new THREE.Scene();
-  scene.add(camera);
-  paused = false;
-  game = window.__game = new Game({
-    scene, camera, renderer, audio, input, hud, settings,
-    onMatchEnd: (winner) => {
-      setTimeout(() => {
-        if (!game) return;
-        input.unlock();
-        hud.unbind();
-        menus.showEnd(game, winner);
-        menus.showLockOverlay(false);
-        disposeGameKeepStats();
-      }, 1400);
-    },
-  }, setup);
-  menus.clear();
-  if (requestLock) input.lock();
+  const build = () => {
+    scene = new THREE.Scene();
+    scene.add(camera);
+    postfx.setScene(scene);
+    paused = false;
+    game = window.__game = new Game({
+      scene, camera, renderer, audio, input, hud, settings, postfx,
+      onMatchEnd: (winner) => {
+        setTimeout(() => {
+          if (!game) return;
+          input.unlock();
+          hud.unbind();
+          menus.showEnd(game, winner);
+          menus.showLockOverlay(false);
+          disposeGameKeepStats();
+        }, 1400);
+      },
+    }, setup);
+    if (loading) {
+      // Warm up behind the loading screen: frame the scene, compile shaders,
+      // and prime the GPU pipeline so the first visible frame doesn't hitch.
+      try {
+        game.update(0);
+        renderer.compile(scene, camera);
+        postfx.update(0);
+        postfx.render();
+      } catch (err) { console.error(err); }
+    }
+    menus.clear();
+    menus.showLoading(false);
+    last = performance.now(); // reset the frame clock so the first dt isn't a spike
+    if (requestLock) input.lock();
+  };
+  if (loading) {
+    // Paint the loading overlay (and start its compositor-driven spinner)
+    // before the synchronous world build freezes the main thread for a beat.
+    menus.showLoading(true);
+    requestAnimationFrame(() => requestAnimationFrame(build));
+  } else {
+    build();
+  }
 }
 
 let endedGame = null;
@@ -213,7 +293,8 @@ function loop(now) {
     game.update(dt);
   }
   input.endFrame(); // clear one-shot key edges exactly once per frame
-  renderer.render(scene, camera);
+  postfx.update(dt);
+  postfx.render();
 }
 requestAnimationFrame(loop);
 
@@ -242,7 +323,7 @@ if (params.get('auto')) {
       sense: Number(params.get('se') ?? 50), iq: Number(params.get('iq') ?? 50),
     };
   }
-  startGame(setup, { requestLock: false });
+  startGame(setup, { requestLock: false, loading: false }); // tests build synchronously
 } else {
   menus.showMain();
 }

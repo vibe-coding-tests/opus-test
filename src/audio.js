@@ -445,6 +445,7 @@ export class AudioEngine {
       case 'click': T({ dur: 0.05, f0: 900, type: 'square', vol: 0.12 }); break;
       case 'hover': T({ dur: 0.03, f0: 1400, type: 'sine', vol: 0.06 }); break;
       case 'buy': T({ dur: 0.08, f0: 800, f1: 1200, type: 'triangle', vol: 0.25 }); T({ at: 0.07, dur: 0.12, f0: 1400, type: 'sine', vol: 0.2 }); break;
+      case 'cash': T({ dur: 0.05, f0: 1320, f1: 1760, type: 'triangle', vol: 0.1 }); T({ at: 0.04, dur: 0.07, f0: 1980, type: 'sine', vol: 0.08 }); break;
       case 'deny': T({ dur: 0.15, f0: 220, f1: 160, type: 'square', vol: 0.2 }); break;
       case 'kill': T({ dur: 0.07, f0: 1000, type: 'square', vol: 0.15 }); T({ at: 0.06, dur: 0.09, f0: 1500, type: 'square', vol: 0.12 }); break;
       default: break;
