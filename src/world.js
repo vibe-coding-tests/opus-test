@@ -81,46 +81,110 @@ export class World {
     return null;
   }
 
-  // Slab raycast vs all boxes. dir need not be normalized if max==1 (segment mode).
-  raycast(ox, oy, oz, dx, dy, dz, max) {
+  _raycastBox(b, ox, oy, oz, dx, dy, dz, bestT) {
+    let tmin = 0, tmax = bestT, axis = -1, sign = 0;
+    // X
+    if (Math.abs(dx) < 1e-9) { if (ox < b.x0 || ox > b.x1) return null; }
+    else {
+      const inv = 1 / dx;
+      let t1 = (b.x0 - ox) * inv, t2 = (b.x1 - ox) * inv, s = -1;
+      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; s = 1; }
+      if (t1 > tmin) { tmin = t1; axis = 0; sign = s; }
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return null;
+    }
+    // Y
+    if (Math.abs(dy) < 1e-9) { if (oy < b.y0 || oy > b.y1) return null; }
+    else {
+      const inv = 1 / dy;
+      let t1 = (b.y0 - oy) * inv, t2 = (b.y1 - oy) * inv, s = -1;
+      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; s = 1; }
+      if (t1 > tmin) { tmin = t1; axis = 1; sign = s; }
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return null;
+    }
+    // Z
+    if (Math.abs(dz) < 1e-9) { if (oz < b.z0 || oz > b.z1) return null; }
+    else {
+      const inv = 1 / dz;
+      let t1 = (b.z0 - oz) * inv, t2 = (b.z1 - oz) * inv, s = -1;
+      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; s = 1; }
+      if (t1 > tmin) { tmin = t1; axis = 2; sign = s; }
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return null;
+    }
+    if (!(tmin < bestT && tmin > 0)) return null;
+    return {
+      t: tmin,
+      nx: axis === 0 ? sign : 0,
+      ny: axis === 1 ? sign : 0,
+      nz: axis === 2 ? sign : 0,
+      box: b,
+    };
+  }
+
+  _raycastBrute(ox, oy, oz, dx, dy, dz, max) {
     let bestT = max, hit = null, nx = 0, ny = 0, nz = 0;
     for (const b of this.boxes) {
-      let tmin = 0, tmax = bestT, axis = -1, sign = 0;
-      // X
-      if (Math.abs(dx) < 1e-9) { if (ox < b.x0 || ox > b.x1) continue; }
-      else {
-        const inv = 1 / dx;
-        let t1 = (b.x0 - ox) * inv, t2 = (b.x1 - ox) * inv, s = -1;
-        if (t1 > t2) { const t = t1; t1 = t2; t2 = t; s = 1; }
-        if (t1 > tmin) { tmin = t1; axis = 0; sign = s; }
-        if (t2 < tmax) tmax = t2;
-        if (tmin > tmax) continue;
-      }
-      // Y
-      if (Math.abs(dy) < 1e-9) { if (oy < b.y0 || oy > b.y1) continue; }
-      else {
-        const inv = 1 / dy;
-        let t1 = (b.y0 - oy) * inv, t2 = (b.y1 - oy) * inv, s = -1;
-        if (t1 > t2) { const t = t1; t1 = t2; t2 = t; s = 1; }
-        if (t1 > tmin) { tmin = t1; axis = 1; sign = s; }
-        if (t2 < tmax) tmax = t2;
-        if (tmin > tmax) continue;
-      }
-      // Z
-      if (Math.abs(dz) < 1e-9) { if (oz < b.z0 || oz > b.z1) continue; }
-      else {
-        const inv = 1 / dz;
-        let t1 = (b.z0 - oz) * inv, t2 = (b.z1 - oz) * inv, s = -1;
-        if (t1 > t2) { const t = t1; t1 = t2; t2 = t; s = 1; }
-        if (t1 > tmin) { tmin = t1; axis = 2; sign = s; }
-        if (t2 < tmax) tmax = t2;
-        if (tmin > tmax) continue;
-      }
-      if (tmin < bestT && tmin > 0) {
-        bestT = tmin; hit = b;
-        nx = axis === 0 ? sign : 0; ny = axis === 1 ? sign : 0; nz = axis === 2 ? sign : 0;
+      const h = this._raycastBox(b, ox, oy, oz, dx, dy, dz, bestT);
+      if (h) {
+        bestT = h.t; hit = h.box; nx = h.nx; ny = h.ny; nz = h.nz;
       }
     }
+    if (!hit) return null;
+    return { t: bestT, x: ox + dx * bestT, y: oy + dy * bestT, z: oz + dz * bestT, nx, ny, nz, box: hit };
+  }
+
+  // Slab raycast over the uniform grid. dir need not be normalized if max==1 (segment mode).
+  raycast(ox, oy, oz, dx, dy, dz, max) {
+    if (!this._grid) return this._raycastBrute(ox, oy, oz, dx, dy, dz, max);
+
+    let bestT = max, hit = null, nx = 0, ny = 0, nz = 0;
+    const scan = (arr, qid) => {
+      if (!arr) return;
+      for (const b of arr) {
+        if (b._q === qid) continue;
+        b._q = qid;
+        const h = this._raycastBox(b, ox, oy, oz, dx, dy, dz, bestT);
+        if (h) {
+          bestT = h.t; hit = h.box; nx = h.nx; ny = h.ny; nz = h.nz;
+        }
+      }
+    };
+
+    const cs = this._gridCell;
+    const qid = ++this._qid;
+    if (Math.abs(dx) < 1e-9 && Math.abs(dz) < 1e-9) {
+      const ix = Math.floor(ox / cs), iz = Math.floor(oz / cs);
+      scan(this._grid.get(ix * 100000 + iz), qid);
+    } else {
+      let ix = Math.floor(ox / cs), iz = Math.floor(oz / cs);
+      const endX = ox + dx * max, endZ = oz + dz * max;
+      const endIx = Math.floor(endX / cs), endIz = Math.floor(endZ / cs);
+      const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+      const stepZ = dz > 0 ? 1 : dz < 0 ? -1 : 0;
+      let tMaxX = stepX ? (((stepX > 0 ? ix + 1 : ix) * cs) - ox) / dx : Infinity;
+      let tMaxZ = stepZ ? (((stepZ > 0 ? iz + 1 : iz) * cs) - oz) / dz : Infinity;
+      const tDeltaX = stepX ? cs / Math.abs(dx) : Infinity;
+      const tDeltaZ = stepZ ? cs / Math.abs(dz) : Infinity;
+      const maxSteps = Math.abs(endIx - ix) + Math.abs(endIz - iz) + 4;
+      let steps = 0;
+
+      for (;;) {
+        scan(this._grid.get(ix * 100000 + iz), qid);
+        if ((ix === endIx && iz === endIz) || steps++ > maxSteps) break;
+        if (tMaxX <= tMaxZ) {
+          if (tMaxX > bestT) break;
+          ix += stepX;
+          tMaxX += tDeltaX;
+        } else {
+          if (tMaxZ > bestT) break;
+          iz += stepZ;
+          tMaxZ += tDeltaZ;
+        }
+      }
+    }
+
     if (!hit) return null;
     return { t: bestT, x: ox + dx * bestT, y: oy + dy * bestT, z: oz + dz * bestT, nx, ny, nz, box: hit };
   }

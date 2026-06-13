@@ -176,22 +176,25 @@ export class Player {
 
   // --------------------------------------------------------------- state ---
   eyeY() { return this.pos.y + this.eyeSmooth; }
-  eyePos() { return new THREE.Vector3(this.pos.x, this.eyeY(), this.pos.z); }
-  lookDir() {
+  eyePosInto(out) { return out.set(this.pos.x, this.eyeY(), this.pos.z); }
+  eyePos() { return this.eyePosInto(new THREE.Vector3()); }
+  lookDirInto(out) {
     const cp = Math.cos(this.pitch);
-    return new THREE.Vector3(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
+    return out.set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
   }
+  lookDir() { return this.lookDirInto(new THREE.Vector3()); }
 
   // where the CROSSHAIR points: true aim plus view punch. Bolts follow the
   // camera so recoil is honest — what you see is where you shoot, and
   // pulling down during a spray actually compensates (bots carry no punch).
-  aimDir() {
-    if (!this.punchPitch && !this.punchYaw) return this.lookDir();
+  aimDirInto(out) {
+    if (!this.punchPitch && !this.punchYaw) return this.lookDirInto(out);
     const yaw = this.yaw + this.punchYaw;
     const pitch = clamp(this.pitch + this.punchPitch, -1.55, 1.55);
     const cp = Math.cos(pitch);
-    return new THREE.Vector3(-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp);
+    return out.set(-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp);
   }
+  aimDir() { return this.aimDirInto(new THREE.Vector3()); }
   get crouching() { return this.body.height < 1.5; }
 
   speedMult() {

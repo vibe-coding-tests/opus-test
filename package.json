@@ -11,6 +11,7 @@
   "scripts": {
     "start": "vite --open",
     "dev": "vite --open",
+    "test": "node --test",
     "build": "vite build",
     "preview": "vite preview --open",
     "soak": "node scripts/soak.mjs",

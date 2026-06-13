@@ -10,6 +10,11 @@ export class SpellSystem {
   constructor(game) {
     this.game = game;
     this.projectiles = [];
+    this._castDir = new THREE.Vector3();
+    this._fireDir = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._up = new THREE.Vector3();
+    this._origin = new THREE.Vector3();
   }
 
   // effective stats helpers ------------------------------------------------
@@ -79,13 +84,14 @@ export class SpellSystem {
   }
 
   castOrigin(p) {
-    const dir = p.aimDir();
-    const right = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+    const dir = p.aimDirInto(this._castDir);
+    const right = this._right.set(-dir.z, 0, dir.x).normalize();
     const cp = p.wand.castPoint || {};
-    return p.eyePos()
+    const origin = p.eyePosInto(this._origin)
       .addScaledVector(dir, cp.fwd ?? 0.5)
-      .addScaledVector(right, cp.right ?? 0.16)
-      .add(new THREE.Vector3(0, cp.up ?? -0.14, 0));
+      .addScaledVector(right, cp.right ?? 0.16);
+    origin.y += cp.up ?? -0.14;
+    return origin;
   }
 
   spreadFor(p, spell) {
@@ -114,27 +120,28 @@ export class SpellSystem {
       return;
     }
 
-    const dir = p.aimDir(); // punched view — bolts go where the crosshair points
+    const dir = p.aimDirInto(this._fireDir); // punched view — bolts go where the crosshair points
     const spread = this.spreadFor(p, spell);
     if (spread > 0) {
-      const right = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
-      const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+      const right = this._right.set(-dir.z, 0, dir.x).normalize();
+      const up = this._up.crossVectors(right, dir).normalize();
       dir.addScaledVector(right, grand() * spread).addScaledVector(up, grand() * spread).normalize();
     }
     const origin = this.castOrigin(p);
 
     const lob = spell.kind === 'lob';
     const speed = spell.speed * (spell.kind === 'bolt' ? (p.disc?.boltSpeed ?? 1) : 1);
-    const vel = dir.clone().multiplyScalar(speed);
-    if (lob) vel.y += 3.2;
+    const vx = dir.x * speed;
+    const vy = dir.y * speed + (lob ? 3.2 : 0);
+    const vz = dir.z * speed;
 
     const fx = this.game.effects.acquireBolt(spell);
     fx.group.position.copy(origin);
-    fx.group.lookAt(origin.x + vel.x, origin.y + vel.y, origin.z + vel.z);
+    fx.group.lookAt(origin.x + vx, origin.y + vy, origin.z + vz);
 
     this.projectiles.push({
       x: origin.x, y: origin.y, z: origin.z,
-      vx: vel.x, vy: vel.y, vz: vel.z,
+      vx, vy, vz,
       spell, owner: p, life: 5, traveled: 0,
       gravity: lob ? 14 : 0, fx,
     });

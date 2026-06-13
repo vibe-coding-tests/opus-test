@@ -39,6 +39,8 @@ function buildTextures() {
 const MAX_POINTS = 4096;
 const MAX_SPRITES = 240;
 const MAX_DECALS = 48;
+const BURST_C1 = new THREE.Color();
+const BURST_C2 = new THREE.Color();
 
 export class Particles {
   constructor(scene) {
@@ -133,7 +135,7 @@ export class Particles {
 
   burst({ pos, count = 12, color = 0xffffff, color2, speed = 4, dirX = 0, dirY = 0.5, dirZ = 0, spread = 1, life = 0.5, size = 0.5, gravity = 6, drag = 2, shrink = 1, alpha = 1 }) {
     const n = Math.min(Math.round(count * this.quality), MAX_POINTS - this.count);
-    const c1 = new THREE.Color(color), c2 = color2 !== undefined ? new THREE.Color(color2) : c1;
+    const c1 = BURST_C1.set(color), c2 = color2 !== undefined ? BURST_C2.set(color2) : c1;
     for (let k = 0; k < n; k++) {
       const i = this.count++;
       this.pPos[i * 3] = pos.x; this.pPos[i * 3 + 1] = pos.y; this.pPos[i * 3 + 2] = pos.z;
