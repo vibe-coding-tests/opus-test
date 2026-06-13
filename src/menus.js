@@ -1,6 +1,6 @@
 // Menus: main, match setup (mode/map/team/character/wand/bots), settings with
 // keybinds + crosshair editor, pause, lock overlay, match end screen.
-import { CHARACTERS, WANDS, TEAM, TEAM_INFO, MAP_LIST, DIFFICULTIES, FORMATS, DISCIPLINES, SPELLS } from './data.js';
+import { CHARACTERS, WANDS, EQUIPMENT, EQUIP_EFFECTS, TEAM, TEAM_INFO, MAP_LIST, DIFFICULTIES, FORMATS, DISCIPLINES, SPELLS } from './data.js';
 import { MAP_BUILDERS } from './maps/index.js';
 import { bakeRadar } from './mapbuilder.js';
 import { el, clamp } from './utils.js';
@@ -36,6 +36,9 @@ export class Menus {
     this.setup.foes = (this.setup.foes || []).filter((id) => validChar(id) && id !== this.setup.charId && !this.setup.squad.includes(id));
     this.setupStep = 0;
     this.activePanel = null;
+    this.settingsFromPause = false;
+    this.endState = null;
+    this.debugReturn = null;
   }
 
   click() { this.ctx.audio.ui('click'); }
@@ -54,6 +57,104 @@ export class Menus {
     const p = el('div', `panel ${cls}`, this.el);
     this.activePanel = cls;
     return p;
+  }
+
+  isVisible() {
+    return this.el.style.display !== 'none' && !!this.activePanel;
+  }
+
+  captureDebugReturn() {
+    return {
+      panel: this.activePanel,
+      setupMode: this.setup.mode,
+      settingsFromPause: this.settingsFromPause,
+      endState: this.endState,
+    };
+  }
+
+  restoreDebugReturn(state = this.debugReturn) {
+    if (!state) return this.showMain();
+    if (state.panel === 'main-menu') return this.showMain();
+    if (state.panel === 'help') return this.showHelp();
+    if (state.panel === 'setup') return this.showSetup(state.setupMode || this.setup.mode);
+    if (state.panel === 'settings') return this.showSettings(!!state.settingsFromPause);
+    if (state.panel === 'pause') return this.showPause();
+    if (state.panel === 'end-screen' && state.endState) return this.showEnd(state.endState.game, state.endState.winner);
+    return this.showMain();
+  }
+
+  toggleDebugCheats() {
+    if (!this.isVisible()) return false;
+    if (this.activePanel === 'debug-cheats') this.restoreDebugReturn();
+    else this.showDebugCheats();
+    return true;
+  }
+
+  showDebugCheats() {
+    if (this.activePanel !== 'debug-cheats') this.debugReturn = this.captureDebugReturn();
+    const p = this.panel('debug-cheats');
+    const game = this.ctx.getGame?.();
+    const human = game?.human;
+    el('h2', 'panel-title', p, 'DEBUG / CHEATS');
+    el('div', 'debug-sub', p, 'Menu-only tools. Press F9 to open or close this panel from any menu.');
+    const body = el('div', 'debug-grid', p);
+    const status = el('div', 'debug-status', p, '');
+    const setStatus = (text) => { status.textContent = text; };
+    const mk = (label, sub, fn, disabled = false) => {
+      const b = el('button', `main-btn debug-card${disabled ? ' disabled' : ''}`, body);
+      el('div', 'mb-label', b, label);
+      el('div', 'mb-sub', b, sub);
+      if (!disabled) b.onclick = () => { this.click(); fn(); };
+      return b;
+    };
+
+    if (human) {
+      mk('REFILL HEALTH + MANA', 'Restores your current wizard and clears hard debuffs.', () => {
+        human.health = human.stats.hp;
+        human.mana = human.stats.mana;
+        human.disarmT = human.blindT = human.slowT = human.snareT = human.silenceT = 0;
+        human.burnT = human.staggerT = human.freezeT = 0;
+        human.bleeds.length = 0;
+        game.hud.notice('Debug: refilled health and mana', 'good');
+        setStatus('Refilled health and mana.');
+      });
+      mk('GRANT 16K GALLEONS', 'Sets your money to at least 16000 for buy testing.', () => {
+        human.money = Math.max(human.money, 16000);
+        game.hud.refreshBuy();
+        game.hud.notice('Debug: 16000 G granted', 'good');
+        setStatus('Granted 16000 Galleons.');
+      }, game.mode === 'dm');
+      mk('UNLOCK LOADOUT', 'Known spells, max charges, max gear, and your preferred wand.', () => {
+        for (const [id, sp] of Object.entries(SPELLS)) {
+          if (sp.exclusive && human.charId !== sp.exclusive) continue;
+          if (id === 'stupefy' && human.charId === 'snape') continue;
+          human.owned.add(id);
+          if (sp.charges) human.charges[id] = human.chargeCap(sp);
+        }
+        for (const eq of EQUIPMENT) {
+          human.equip[eq.id] = eq.max;
+          if (eq.id === 'vest') human.vestHP = Math.max(human.vestHP, EQUIP_EFFECTS.vest.pool);
+        }
+        human.wand = WANDS.find((w) => w.id === human.prefWand) || human.wand;
+        human.ensureValidSpell();
+        game.hud.refreshEquip();
+        game.hud.refreshBuy();
+        game.hud.notice('Debug: loadout unlocked', 'good');
+        setStatus('Unlocked spells, gear, and preferred wand.');
+      });
+      mk(game.mode === 'dm' ? 'FINISH DEATHMATCH' : 'WIN ROUND', 'Ends the current test in your favor.', () => {
+        if (game.mode === 'dm') game.finishMatch(human.team);
+        else game.endRound(human.team, 'elim');
+        setStatus(game.mode === 'dm' ? 'Finished deathmatch.' : 'Ended round in your favor.');
+      }, game.over || game.state === 'end');
+    } else {
+      mk('NO ACTIVE MATCH', 'Start a match and open the pause menu to use live cheats.', () => {}, true);
+      mk('CURRENT SETUP READY', 'Use the normal setup flow; F9 stays available on every menu panel.', () => {}, true);
+    }
+
+    const foot = el('div', 'setup-foot', p);
+    const back = el('button', 'btn big', foot, '← BACK');
+    back.onclick = () => { this.click(); this.restoreDebugReturn(); };
   }
 
   // -------------------------------------------------------------- main menu ---
@@ -465,6 +566,7 @@ export class Menus {
 
   // --------------------------------------------------------------- settings ---
   showSettings(fromPause) {
+    this.settingsFromPause = !!fromPause;
     const p = this.panel('settings');
     const s = this.ctx.settings;
     el('h2', 'panel-title', p, 'SETTINGS');
@@ -487,6 +589,14 @@ export class Menus {
     slider('Mouse sensitivity', () => s.sens, (v) => (s.sens = v), 0.2, 4, 0.05, (v) => v.toFixed(2));
     slider('Field of view', () => s.fov, (v) => (s.fov = v), 70, 110, 1, (v) => `${v}°`);
     slider('Volume', () => s.volume, (v) => (s.volume = v), 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
+    slider('Bot voices', () => s.voiceVolume ?? 0.85, (v) => (s.voiceVolume = v), 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
+    slider('Bot chatter', () => s.chatter ?? 0.7, (v) => (s.chatter = v), 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
+    const subRow = el('div', 'opt-row', grid);
+    el('label', '', subRow, 'Comms subtitles');
+    const subChk = el('input', '', subRow);
+    subChk.type = 'checkbox';
+    subChk.checked = s.subtitles !== false;
+    subChk.onchange = () => { s.subtitles = subChk.checked; this.ctx.applySettings(); this.ctx.saveSettings(); };
     const fpsRow = el('div', 'opt-row', grid);
     el('label', '', fpsRow, 'FPS counter');
     const fpsChk = el('input', '', fpsRow);
@@ -673,6 +783,7 @@ export class Menus {
 
   // -------------------------------------------------------------- end screen ---
   showEnd(game, winner) {
+    this.endState = { game, winner };
     const p = this.panel('end-screen');
     const human = game.human;
     const humanWon = winner === human.team;

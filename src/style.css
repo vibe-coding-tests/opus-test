@@ -22,7 +22,7 @@
 }
 
 /* shared glass material */
-.hud-top, .radar, .feed-row, .hud-bl, .equip-chip, .slot, .tag, .dash-ind,
+.hud-top, .radar, .feed-row, .comms-row, .hud-bl, .equip-chip, .slot, .tag, .dash-ind,
 .notice, .buy-timer, .spectate, .loot-hint, .relic-chip, .charge, .progress-bar {
   background: linear-gradient(160deg, var(--glass-hi), transparent 38%), var(--glass);
   border: 1px solid var(--glass-brd);
@@ -61,6 +61,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 .panel {
+  position: relative;
   width: min(1180px, 94vw);
   max-height: 92vh;
   display: flex; flex-direction: column;
@@ -101,6 +102,13 @@ button { font-family: inherit; cursor: pointer; }
 
 .panel-title { letter-spacing: 6px; font-size: 26px; font-weight: 900; color: var(--gold); }
 .sec-title { letter-spacing: 3px; font-size: 13px; color: var(--dim); margin: 14px 0 8px; }
+
+.debug-cheats { width: min(820px, 94vw); }
+.debug-sub { color: var(--dim); font-size: 13px; line-height: 1.45; max-width: 560px; }
+.debug-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.debug-card.disabled { opacity: 0.42; cursor: not-allowed; }
+.debug-card.disabled:hover { border-color: var(--line); transform: none; box-shadow: none; }
+.debug-status { min-height: 18px; color: var(--gold); font-size: 12.5px; font-weight: 700; }
 
 .setup-scroll { overflow-y: auto; padding-right: 8px; flex: 1; min-height: 0; }
 .setup-scroll::-webkit-scrollbar { width: 8px; }
@@ -430,6 +438,52 @@ button { font-family: inherit; cursor: pointer; }
 .feed-name.death { color: var(--death); }
 .feed-ico { width: 18px; height: 18px; opacity: 0.95; }
 .feed-hs { color: #ffd24a; font-size: 14px; }
+
+/* teammate comms feed — left side, above the vitals module */
+.comms-feed {
+  position: absolute; left: 16px; bottom: 33%;
+  display: flex; flex-direction: column; gap: 5px; align-items: flex-start;
+  max-width: 30vw; pointer-events: none;
+}
+.comms-row {
+  display: flex; align-items: baseline; gap: 7px;
+  border-radius: 999px; padding: 5px 13px;
+  font-size: 13px; transition: opacity 0.55s;
+  border-color: rgba(90, 160, 220, 0.32);
+}
+.comms-row.fade { opacity: 0; }
+.comms-name { font-weight: 800; letter-spacing: 0.3px; }
+.comms-name.order { color: var(--order); }
+.comms-name.death { color: var(--death); }
+.comms-text { color: #cfe3ff; font-style: italic; font-weight: 600; }
+
+/* radial command wheel */
+.cmd-wheel {
+  position: absolute; left: 50%; top: 50%; width: 360px; height: 360px;
+  transform: translate(-50%, -50%); pointer-events: none; z-index: 40;
+}
+.cmd-wheel.hidden { display: none; }
+.cmd-hub {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 98px; height: 98px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.5px; color: #cfe3ff;
+  background: var(--glass); border: 1px solid var(--glass-brd);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); padding: 6px;
+}
+.cmd-slice {
+  position: absolute; transform: translate(-50%, -50%);
+  padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 700;
+  color: #c9d4e6; white-space: nowrap;
+  background: var(--glass); border: 1px solid var(--glass-brd);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  transition: transform 0.08s, color 0.08s, box-shadow 0.08s;
+}
+.cmd-slice.sel {
+  color: #fff; border-color: rgba(125, 255, 160, 0.7);
+  transform: translate(-50%, -50%) scale(1.16);
+  box-shadow: 0 0 18px rgba(125, 255, 160, 0.4);
+}
 
 .hud-bl {
   position: absolute; left: 18px; bottom: 16px;

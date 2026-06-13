@@ -12,6 +12,8 @@ import { SpellSystem } from './spells.js';
 import { Player, Rig, FPRig } from './player.js';
 import { Bot } from './bot.js';
 import { Feedback } from './feedback.js';
+import { Comms } from './comms.js';
+import { Squad } from './squad.js';
 import { clamp, rand, choice, shuffle, yawTo } from './utils.js';
 
 export class Game {
@@ -71,6 +73,8 @@ export class Game {
     this.recentDeaths = []; // {team, x, y, z, killerX, killerZ, t} — bots trade off these
     this.relic = { state: 'idle', carrier: null, pos: new THREE.Vector3(), fuseT: 0, planter: null, plantProgress: 0, defuseProgress: 0, defuser: null, beepT: 0, warned: false };
     this.feedback = new Feedback(this); // trauma shake, camera kicks, bloom swells
+    this.comms = new Comms(this); // voice barks + the teammate radio feed
+    this.squads = { order: new Squad(this, TEAM.ORDER), death: new Squad(this, TEAM.DEATH) };
     // cinematic time control: hitstop freezes the sim for a beat; slow-mo
     // stretches the marquee moments. Disabled under ?auto so tests stay exact.
     this.timeScale = 1; this.hitstopT = 0; this.slowmoT = 0; this.slowmoScale = 1;
@@ -80,6 +84,7 @@ export class Game {
     this.specActive = false; // death overlay cleared, now showing the spectate view
     this.summons = [];   // conjured serpents
     this.drops = [];     // lootable items from the fallen
+    this.pings = [];     // player ping markers {x,y,z,t,kind}
     this.radioT = 0;     // teammate callout rate limiter
     this.baseFov = this.camera.fov;
     this.fovCur = this.camera.fov;
@@ -159,6 +164,8 @@ export class Game {
     this.buyT = ROUND.buyWindow + ROUND.freeze;
     this.frozen = true;
     this.endBanner = null;
+    this.comms.reset();
+    this.pings.length = 0;
     this.spells.clear();
     this.effects.clear();
     this.particles.clear();
@@ -195,39 +202,12 @@ export class Game {
       if (carrier.isHuman) this.hud.notice('You carry the CURSED RELIC — plant it at site A or B (hold E)', 'obj');
     }
 
-    // bot roles + buying
+    // bot roles + buying — the squad coordinator picks one team plan, hands
+    // out complementary roles, and triggers the buy (replacing the old
+    // independent per-bot route roll)
     this.recentDeaths.length = 0;
-    const siteChoice = Math.random() < 0.55 ? 'A' : 'B';
-    const routes = (this.mapMeta.routes.attack || []).filter((r) => r.site === siteChoice);
-    const holdsCfg = this.mapMeta.routes.holds || { A: [], B: [], mid: [] };
-    const defAssign = shuffle(['A', 'A', 'B', 'B', 'mid', 'A', 'B', 'mid']);
-    const enemySpawn = spawnFor(this.attackingTeam)[0];
-    // route length ranking so personalities can pick: lurkers flank long,
-    // entry players take the straight shot
-    const byLen = routes.slice().sort((a, b) => a.via.length - b.via.length);
-    let di = 0;
-    for (const p of this.players) {
-      if (!p.bot) continue;
-      if (p.team === this.attackingTeam) {
-        let r;
-        if (!routes.length) r = { site: siteChoice, via: [] };
-        else {
-          const ai = p.bot.ai;
-          if (Math.random() < ai.lurk) r = byLen[byLen.length - 1];        // longest flank
-          else if (Math.random() < ai.aggro * 0.5) r = byLen[0];           // most direct
-          else r = choice(routes);
-        }
-        p.bot.onRoundStart({ type: 'attack', site: siteChoice, via: r.via.slice(), viaIdx: 0 });
-      } else {
-        const key = defAssign[di++ % defAssign.length];
-        const spots = holdsCfg[key] && holdsCfg[key].length ? holdsCfg[key] : [[this.world.spawns.order[0].x, this.world.spawns.order[0].z]];
-        const [hx, hz] = choice(spots);
-        const hy = this.world.floorY(hx, hz, 25);
-        const faceYaw = enemySpawn ? yawTo({ x: hx, z: hz }, { x: enemySpawn.x, z: enemySpawn.z }) : 0;
-        p.bot.onRoundStart({ type: 'defend', spot: { x: hx, y: hy, z: hz }, faceYaw });
-      }
-      p.bot.buy();
-    }
+    this.squads[this.attackingTeam].planRound();
+    this.squads[this.defendingTeam()].planRound();
 
     // human UI
     this.hud.closeDeath();
@@ -438,6 +418,7 @@ export class Game {
     this.recentDeaths.push({
       team: victim.team, x: victim.pos.x, y: victim.pos.y, z: victim.pos.z,
       killerX: attacker !== victim ? attacker.pos.x : null, killerZ: attacker !== victim ? attacker.pos.z : null,
+      killer: attacker !== victim ? attacker : null, name: victim.name,
       t: this.time,
     });
     if (this.recentDeaths.length > 12) this.recentDeaths.shift();
@@ -505,6 +486,12 @@ export class Game {
         this.hitstop(0.05);
         this.hud.killConfirm(victim, spell, isHS);
         this.feedback.bloomPulse(0.4);
+      } else {
+        // a downed foe earns a bark: a revenge line if this victim had just cut
+        // down one of the attacker's teammates, otherwise a generic gloat
+        const avenged = this.recentDeaths.find((d) => d.killer === victim && d.team === attacker.team && this.time - d.t < 12);
+        if (avenged) this.comms.say(attacker, 'revenge', { scope: 'world', pos: attacker.pos, name: avenged.name, chance: 0.8 });
+        else this.comms.say(attacker, 'kill', { scope: 'world', pos: attacker.pos, chance: 0.5 });
       }
 
       if (this.mode !== 'dm') {
@@ -696,12 +683,109 @@ export class Game {
     this.teamMemory[team].set(enemy.id, { x: enemy.pos.x, y: enemy.pos.y, z: enemy.pos.z, t: this.time, name: enemy.name });
   }
 
-  // Teammate voice line shown to the human (rate-limited so it stays scarce).
+  // Teammate callout: routed through the comms bus, which adds a voice bark
+  // and drops it into the HUD feed (rate-limited there so it stays readable).
   radio(p, text, chance = 1) {
-    if (!p || p.team !== this.human.team || p === this.human) return;
-    if (this.radioT > 0 || this.over || Math.random() > chance) return;
-    this.radioT = 4.5;
-    this.hud.notice(`${p.name}: ${text}`, 'radio');
+    if (!p || this.over) return;
+    this.comms.raw(p, text, { chance });
+  }
+
+  // -------------------------------------------------------- player commands ---
+  // The radial wheel (Game.handleHumanInput) issues these. Each sets a per-bot
+  // order whose compliance is gated by personality, then a teammate speaks an
+  // acknowledgement (or a refusal) through the comms bus.
+  command(id) {
+    const human = this.human;
+    const team = human.team;
+    if (id === 'report') { this.commandReport(team); this.hud.notice('Order: Report in', 'obj'); return; }
+    if (!human.alive) { this.hud.notice('Stay alive to give orders', 'bad'); return; }
+    const mates = this.players.filter((p) => p.bot && p.alive && p.team === team);
+    const t = this.time;
+    const apply = (dur, make) => {
+      for (const p of mates) {
+        const o = make(p);
+        o.until = t + dur;
+        o.from = human;
+        o.obey = p.bot.orderCompliance(o);
+        p.bot.order = o;
+        p.bot.thinkT = Math.min(p.bot.thinkT, 0.03); // act on it now
+      }
+    };
+    let label = '';
+    switch (id) {
+      case 'goA': label = 'Take A'; apply(28, () => ({ type: 'go', site: 'A' })); break;
+      case 'goB': label = 'Take B'; apply(28, () => ({ type: 'go', site: 'B' })); break;
+      case 'push': label = 'Push — go go go!'; apply(12, () => ({ type: 'push' })); break;
+      case 'hold': label = 'Hold positions'; apply(22, (p) => ({ type: 'hold', pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z } })); break;
+      case 'fallback': {
+        label = 'Fall back';
+        const sp = this.attackingTeam === team ? this.world.spawns.death : this.world.spawns.order;
+        const pt = sp && sp[0] ? sp[0] : human.pos;
+        apply(18, () => ({ type: 'fallback', pos: { x: pt.x, y: pt.y, z: pt.z } }));
+        break;
+      }
+      case 'follow': label = 'Follow me'; apply(30, () => ({ type: 'follow', target: human })); break;
+      case 'needhelp': label = 'Need help — on me!'; apply(15, () => ({ type: 'rally', pos: { x: human.pos.x, y: human.pos.y, z: human.pos.z } })); break;
+      default: return;
+    }
+    this.hud.notice(`Order: ${label}`, 'obj');
+    this.commandAck(mates, id);
+  }
+
+  commandAck(mates, id) {
+    const obey = mates.filter((p) => p.bot.order && p.bot.order.obey);
+    const refuse = mates.filter((p) => p.bot.order && !p.bot.order.obey);
+    if (obey.length) this.comms.say(choice(obey), 'ack', { scope: 'team', force: true });
+    if (refuse.length && Math.random() < 0.55) this.comms.say(choice(refuse), 'refuse', { scope: 'team', force: true });
+  }
+
+  commandReport(team) {
+    const mates = this.players.filter((p) => p.bot && p.alive && p.team === team);
+    if (!mates.length) { this.hud.notice('No teammates left', 'bad'); return; }
+    const spk = mates.reduce((a, b) => (b.bot.ai.team > a.bot.ai.team ? b : a), mates[0]);
+    const areas = [...new Set(mates.map((p) => this.areaName(p.pos.x, p.pos.z)))].slice(0, 3);
+    const low = mates.filter((p) => p.health < 45).length;
+    const txt = `${mates.length} up — ${areas.join(', ')}${low ? `, ${low} hurt` : ''}.`;
+    this.comms.say(spk, 'report', { scope: 'team', text: txt, force: true });
+  }
+
+  // Player ping: mark whatever the crosshair is on (an enemy, else the wall),
+  // call it out, and nudge nearby teammates to look / investigate.
+  ping() {
+    const p = this.human;
+    if (!p.alive) return;
+    const eye = p.eyePos();
+    const dir = p.lookDir();
+    let enemy = null, bestDot = 0.985;
+    for (const e of this.players) {
+      if (!e.alive || e.team === p.team) continue;
+      const ep = e.eyePos();
+      const tx = ep.x - eye.x, ty = ep.y - eye.y, tz = ep.z - eye.z;
+      const d = Math.hypot(tx, ty, tz);
+      if (d < 0.2) continue;
+      const dot = (tx * dir.x + ty * dir.y + tz * dir.z) / d;
+      if (dot > bestDot && this.world.segmentClear(eye.x, eye.y, eye.z, ep.x, ep.y, ep.z)) { bestDot = dot; enemy = e; }
+    }
+    let mark;
+    if (enemy) {
+      this.see(p.team, enemy);
+      mark = { x: enemy.pos.x, y: enemy.pos.y, z: enemy.pos.z, t: this.time, kind: 'enemy' };
+    } else {
+      const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 90);
+      const tt = hit ? hit.t : 22;
+      mark = { x: eye.x + dir.x * tt, y: eye.y + dir.y * tt, z: eye.z + dir.z * tt, t: this.time, kind: 'spot' };
+    }
+    this.pings.push(mark);
+    if (this.pings.length > 6) this.pings.shift();
+    const area = this.areaName(mark.x, mark.z);
+    const caller = this.aliveOf(p.team).find((q) => q.bot);
+    if (caller) {
+      this.comms.say(caller, enemy ? 'contact' : 'banter', {
+        scope: 'team', pos: caller.pos, area, text: enemy ? `Enemy ${area} — pinged!` : `Watch ${area}.`,
+      });
+    }
+    for (const q of this.aliveOf(p.team)) q.bot?.onPing?.(mark);
+    this.audio.play('relic_beep', { pos: mark, vol: 0.5 });
   }
 
   // Rough callout name for a position — sites, mid, or a spawn.
@@ -1065,6 +1149,13 @@ export class Game {
     this.lossStreak[loser]++;
     this.lossStreak[winner] = 0;
 
+    // squads digest the round: confidence drifts and defenders learn the site
+    if (this.mode !== 'dm' && this.squads) {
+      const plantSite = this.relic.site || null;
+      this.squads.order.onRoundEnd(winner, reason, plantSite);
+      this.squads.death.onRoundEnd(winner, reason, plantSite);
+    }
+
     // MVP
     const cands = this.teamPlayers(winner);
     let mvp = cands[0], best = -1;
@@ -1194,6 +1285,10 @@ export class Game {
     // bots
     for (const p of this.players) if (p.bot && p.alive) p.bot.update(dt);
 
+    // squad coordinator: reactive team calls (synchronized executes, rotations,
+    // retakes) on a slow ~2Hz tick, phase-offset per team
+    if (this.mode !== 'dm') { this.squads.order.update(dt); this.squads.death.update(dt); }
+
     // players
     for (const p of this.players) p.update(dt);
 
@@ -1274,12 +1369,20 @@ export class Game {
     const input = this.input;
     const c = p.ctrl;
     const m = input.consumeMouse();
-    if (!buyOpenMode) {
+    // command wheel: hold to open, mouse aims a slice, release to issue. While
+    // open it eats the look so choosing a command doesn't swing the camera.
+    const wheelHeld = input.down('commsWheel');
+    if (wheelHeld && !this.hud.wheelOpen && p.alive && !buyOpenMode) this.hud.openWheel();
+    else if (!wheelHeld && this.hud.wheelOpen) this.hud.closeWheel((id) => this.command(id));
+    if (this.hud.wheelOpen) {
+      this.hud.wheelMove(m.dx, m.dy);
+    } else if (!buyOpenMode) {
       // scoped (Avada charge) lowers sensitivity with the FOV, CS-style
       const sens = this.settings.sens * 0.0022 * (this.fovCur / this.baseFov);
       p.yaw -= m.dx * sens;
       p.pitch = clamp(p.pitch - m.dy * sens, -1.45, 1.45);
     }
+    const wheelOpen = this.hud.wheelOpen;
     if (!p.alive) {
       // spectate controls
       if (input.pressed('cast')) this.cycleSpectate(1);
@@ -1300,7 +1403,7 @@ export class Game {
     c.walkHeld = input.down('walk');
     c.useHeld = input.down('use');
     c.climbF = input.down('forward') ? 1 : input.down('back') ? -1 : 0;
-    if (!buyOpenMode) {
+    if (!buyOpenMode && !wheelOpen) {
       c.castHeld = input.down('cast');
       c.altHeld = input.down('altcast');
     } else {
@@ -1308,7 +1411,8 @@ export class Game {
     }
     if (this.frozen) { c.moveX = 0; c.moveZ = 0; c.jump = false; }
 
-    if (!buyOpenMode && !this.frozen && input.pressed('dash')) p.tryDash();
+    if (!buyOpenMode && !wheelOpen && !this.frozen && input.pressed('dash')) p.tryDash();
+    if (input.pressed('ping') && !wheelOpen) this.ping();
 
     for (let i = 1; i <= 5; i++) if (input.pressed(`slot${i}`)) p.selectSlot(i);
     if (m.wheel) p.cycleSpell(m.wheel > 0 ? 1 : -1);

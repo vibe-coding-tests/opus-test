@@ -7,6 +7,18 @@ import { keyLabel } from './input.js';
 
 const DEG_R = Math.PI / 180;
 
+// Command wheel slices, clockwise from the top. Ids are consumed by Game.command.
+export const WHEEL_CMDS = [
+  { id: 'push', label: 'Push!' },
+  { id: 'goA', label: 'Take A' },
+  { id: 'follow', label: 'Follow me' },
+  { id: 'report', label: 'Report in' },
+  { id: 'fallback', label: 'Fall back' },
+  { id: 'goB', label: 'Take B' },
+  { id: 'hold', label: 'Hold' },
+  { id: 'needhelp', label: 'Need help!' },
+];
+
 // ------------------------------------------------------------ spell icons ---
 const iconCache = {};
 export function spellIcon(kind) {
@@ -213,6 +225,9 @@ export class HUD {
     // killfeed
     this.feed = el('div', 'killfeed', h);
 
+    // teammate comms feed — radio callouts + voice-bark subtitles
+    this.commsFeed = el('div', 'comms-feed', h);
+
     // bottom left: vitals
     const bl = el('div', 'hud-bl', h);
     const hpRow = el('div', 'bar-row', bl);
@@ -281,7 +296,71 @@ export class HUD {
     this.scoreboardEl = el('div', 'scoreboard hidden', h);
     this.buyEl = el('div', 'buy-menu hidden', h);
     this.buildBuy();
+    this.buildWheel();
     this.refreshEquip();
+  }
+
+  // ----------------------------------------------------------- command wheel ---
+  buildWheel() {
+    this.wheelOpen = false;
+    this.wheelSel = { x: 0, y: 0 };
+    this.wheelIdx = -1;
+    this.wheelEl = el('div', 'cmd-wheel hidden', this.el);
+    this.wheelHub = el('div', 'cmd-hub', this.wheelEl, 'COMMAND');
+    this.wheelSlices = [];
+    const R = 132;
+    WHEEL_CMDS.forEach((c, i) => {
+      const a = (i / WHEEL_CMDS.length) * Math.PI * 2; // 0 = top, clockwise
+      const s = el('div', 'cmd-slice', this.wheelEl, c.label);
+      s.style.left = `calc(50% + ${Math.sin(a) * R}px)`;
+      s.style.top = `calc(50% - ${Math.cos(a) * R}px)`;
+      this.wheelSlices.push(s);
+    });
+  }
+
+  openWheel() {
+    if (this.wheelOpen) return;
+    this.wheelOpen = true;
+    this.wheelSel.x = 0; this.wheelSel.y = 0;
+    this.wheelIdx = -1;
+    this.wheelEl.classList.remove('hidden');
+    this.wheelHub.textContent = 'COMMAND';
+    this.wheelSlices.forEach((s) => s.classList.remove('sel'));
+    this.game.audio.ui('hover');
+  }
+
+  // accumulate locked-pointer deltas into a selection vector; highlight a slice
+  wheelMove(dx, dy) {
+    if (!this.wheelOpen) return;
+    this.wheelSel.x = clamp(this.wheelSel.x + dx, -200, 200);
+    this.wheelSel.y = clamp(this.wheelSel.y + dy, -200, 200);
+    const mag = Math.hypot(this.wheelSel.x, this.wheelSel.y);
+    let idx = -1;
+    if (mag > 26) {
+      let a = Math.atan2(this.wheelSel.x, -this.wheelSel.y); // 0 = up, clockwise
+      if (a < 0) a += Math.PI * 2;
+      idx = Math.round(a / (Math.PI * 2 / WHEEL_CMDS.length)) % WHEEL_CMDS.length;
+    }
+    if (idx !== this.wheelIdx) {
+      this.wheelIdx = idx;
+      this.wheelSlices.forEach((s, i) => s.classList.toggle('sel', i === idx));
+      this.wheelHub.textContent = idx >= 0 ? WHEEL_CMDS[idx].label : 'COMMAND';
+      if (idx >= 0) this.game.audio.ui('hover');
+    }
+  }
+
+  // release: fire the highlighted command (if any) and close
+  closeWheel(fire) {
+    if (!this.wheelOpen) return;
+    this.wheelOpen = false;
+    this.wheelEl.classList.add('hidden');
+    const idx = this.wheelIdx;
+    this.wheelIdx = -1;
+    if (idx >= 0 && fire) { this.game.audio.ui('click'); fire(WHEEL_CMDS[idx].id); }
+  }
+
+  clearWheel() {
+    if (this.wheelOpen) { this.wheelOpen = false; this.wheelEl?.classList.add('hidden'); this.wheelIdx = -1; }
   }
 
   // ------------------------------------------------------------ crosshair ---
@@ -437,6 +516,17 @@ export class HUD {
     this.noticeEl.textContent = text;
     this.noticeEl.className = `notice show ${kind}`;
     this.noticeT = 3.2;
+  }
+
+  // a teammate callout: stacked, team-colored speaker tag + the spoken line
+  comms(name, text, team = '') {
+    if (!this.commsFeed) return;
+    const row = el('div', 'comms-row', this.commsFeed);
+    el('span', `comms-name ${team}`, row, name);
+    el('span', 'comms-text', row, text);
+    setTimeout(() => row.classList.add('fade'), 5200);
+    setTimeout(() => row.remove(), 5800);
+    while (this.commsFeed.children.length > 4) this.commsFeed.firstChild.remove();
   }
 
   progress(label, t) {
@@ -729,6 +819,16 @@ export class HUD {
       const pulse = r.state === 'planted' ? 4.5 + Math.sin(g.time * 6) * 1.5 : 4;
       dot(r.pos.x, r.pos.z, '#bb55ff', pulse);
     }
+    // player pings (enemy mark = amber, location = cyan), pulsing for ~6s
+    if (g.pings) {
+      for (const pg of g.pings) {
+        const age = g.time - pg.t;
+        if (age > 6 || age < 0) continue;
+        ctx.globalAlpha = clamp(1 - age / 6, 0, 1);
+        dot(pg.x, pg.z, pg.kind === 'enemy' ? '#ffcc44' : '#66e0ff', 4.5 + Math.sin(g.time * 7) * 1.4);
+        ctx.globalAlpha = 1;
+      }
+    }
     ctx.restore();
     // self arrow
     ctx.fillStyle = '#fff';
@@ -758,6 +858,7 @@ export class HUD {
     const g = this.game;
     if (!g || !this.el) return;
     const p = g.human;
+    if (this.wheelOpen && (this.buyOpen || !p.alive)) this.clearWheel();
 
     // vitals
     const hpFrac = clamp(p.health / p.stats.hp, 0, 1);

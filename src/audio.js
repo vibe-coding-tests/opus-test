@@ -1,5 +1,8 @@
 // Fully synthesized WebAudio: spell sfx, UI, announcer stingers, ambient beds.
-import { clamp, rand } from './utils.js';
+import { clamp, rand, grand } from './utils.js';
+
+// Vowel formant pairs (F1, F2) for the procedural voice: ah / eh / ee / oh / oo.
+const VOWELS = [[720, 1240], [500, 1800], [320, 2300], [520, 920], [360, 800]];
 
 export class AudioEngine {
   constructor() {
@@ -433,6 +436,58 @@ export class AudioEngine {
         break;
     }
     return null;
+  }
+
+  // Procedural voice "bark": a short pitched formant utterance, spatialized.
+  // No speech files — vowel-like syllables tinted by the champion's VOICE
+  // profile and the mood of the line. profile fields documented in data.js.
+  voice(profile = {}, mood = 'calm', pos = null, vol = 1) {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const now = this.ctx.currentTime;
+    // same-frame guard so simultaneous callouts don't pile into a roar
+    if (this._lastVoiceAt && now - this._lastVoiceAt < 0.05) return;
+    this._lastVoiceAt = now;
+    const base = profile.pitch ?? 160;
+    const shift = profile.shift ?? 1;
+    const rasp = profile.rasp ?? 0.05;
+    const wob = profile.wobble ?? 0.05;
+    let rate = profile.rate ?? 1;
+    let pitchMul = 1, bright = 1;
+    if (mood === 'urgent') { pitchMul = 1.12; rate *= 0.82; bright = 1.1; }
+    else if (mood === 'hurt') { pitchMul = 0.9; rate *= 1.1; bright = 0.92; }
+    else if (mood === 'smug' || mood === 'taunt') { pitchMul = 1.05; rate *= 1.18; }
+    const nSyl = clamp((profile.syl || 0) || (2 + ((Math.random() * 2) | 0)), 1, 4);
+    const ttl = nSyl * 0.22 * rate + 0.6;
+    const out = this._out(pos, vol * 0.5, ttl);
+    let t = now + 0.01;
+    for (let i = 0; i < nSyl; i++) {
+      const dur = rand(0.1, 0.17) * rate;
+      const v = VOWELS[(Math.random() * VOWELS.length) | 0];
+      let f0 = base * pitchMul * rand(0.94, 1.06);
+      if (mood === 'hurt') f0 *= 1 - i * 0.06;       // sentence falls when hurt
+      else if (mood === 'urgent') f0 *= 1 + i * 0.03; // lifts when urgent
+      const carrier = this.ctx.createOscillator();
+      carrier.type = 'sawtooth';
+      carrier.frequency.setValueAtTime(f0, t);
+      carrier.frequency.linearRampToValueAtTime(Math.max(40, f0 * (1 + grand() * wob)), t + dur);
+      const syl = this.ctx.createGain();
+      syl.gain.setValueAtTime(0, t);
+      syl.gain.linearRampToValueAtTime(0.9, t + 0.02);
+      syl.gain.setValueAtTime(0.85, t + dur * 0.6);
+      syl.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      // parallel formant bank shapes the carrier into a vowel
+      const bank = [[v[0] * shift * bright, 0.5], [v[1] * shift * bright, 0.34], [2700 * shift, 0.12]];
+      for (const [ff, fv] of bank) {
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.Q.value = 8; bp.frequency.value = ff;
+        const fg = this.ctx.createGain(); fg.gain.value = fv;
+        carrier.connect(bp).connect(fg).connect(syl);
+      }
+      if (rasp > 0.01) this._noise(syl, t, dur, { f0: 1500 * shift, f1: 800, q: 1.5, vol: rasp * 0.4, type: 'bandpass' });
+      syl.connect(out);
+      carrier.start(t); carrier.stop(t + dur + 0.05);
+      t += dur + rand(0.03, 0.07) * rate;
+    }
   }
 
   ui(name) {

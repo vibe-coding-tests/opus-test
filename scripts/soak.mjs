@@ -1082,6 +1082,100 @@ const rosterErrs = realErrors();
 check(rosterErrs.length === 0, `no console errors in roster scenario (${rosterErrs.length})`);
 if (rosterErrs.length) log('   errors:', rosterErrs.slice(0, 5));
 
+// ------------------- 17. comms bus, player commands, pings, squad brain ---
+await load('map=dust2&team=order&char=harry&diff=hard&squad=ginny,hermione,ron,neville&foes=bellatrix,greyback,draco,lucius,voldemort');
+const squad = await page.evaluate(() => {
+  const g = window.__game;
+  const res = {};
+  const human = g.human;
+
+  // tally every line the comms bus actually emits this scenario
+  const cats = {};
+  const origEmit = g.comms.emit.bind(g.comms);
+  g.comms.emit = (m) => { const r = origEmit(m); if (r) cats[m.cat] = (cats[m.cat] || 0) + 1; return r; };
+  const step = (s) => { for (let i = 0; i < Math.ceil(s / 0.025); i++) g.update(0.025); };
+
+  // A) the squad coordinator hands out complementary roles + a sane posture
+  step(8); // through freeze into live; planRound has run for both teams
+  const att = g.squads[g.attackingTeam];
+  const def = g.squads[g.defendingTeam()];
+  const rolesOf = (s) => new Set(s.aliveBots().map((p) => p.bot.role?.squadRole));
+  res.rolesAssigned = att.aliveBots().every((p) => !!p.bot.role?.squadRole) &&
+    def.aliveBots().every((p) => !!p.bot.role?.squadRole);
+  res.rolesComplementary = rolesOf(att).size >= 3;
+  res.postureValid = ['save', 'force', 'full'].includes(att.posture) && ['save', 'force', 'full'].includes(def.posture);
+
+  // B) procedural voice doesn't throw headless and a teammate line hits the feed
+  let voiceOk = true;
+  try { g.audio.voice(g.players[0], 'urgent', g.players[0].pos, 0.5); } catch (e) { voiceOk = false; }
+  res.voiceNoThrow = voiceOk;
+  const mateSpk = g.aliveOf(human.team).find((p) => p.bot) || human;
+  const feedBefore = document.querySelectorAll('.comms-row').length;
+  g.comms.say(mateSpk, 'contact', { scope: 'team', pos: mateSpk.pos, text: 'Contact mid!', force: true });
+  res.feedRenders = document.querySelectorAll('.comms-row').length > feedBefore;
+
+  // C) a player command reaches the bots as an order, compliance is personality-gated
+  human.alive = true; human.health = human.stats.hp;
+  for (const p of g.aliveOf(human.team)) if (p.bot) p.bot.order = null;
+  g.command('goA');
+  const ordered = g.aliveOf(human.team).filter((p) => p.bot && p.bot.order && p.bot.order.type === 'go');
+  res.orderApplied = ordered.length > 0;
+  res.orderCompliance = ordered.some((p) => p.bot.order.obey === true);
+
+  // D) report-in makes the squad leader answer through the bus
+  let reported = false;
+  const origSay = g.comms.say.bind(g.comms);
+  g.comms.say = (sp, cat, o) => { if (cat === 'report') reported = true; return origSay(sp, cat, o); };
+  g.command('report');
+  res.reportAnswers = reported;
+  g.comms.say = origSay;
+
+  // E) a ping marks the world and alerts a nearby teammate
+  const beforePings = g.pings.length;
+  g.ping();
+  res.pingDrops = g.pings.length > beforePings;
+  const foe = g.aliveOf(g.defendingTeam())[0];
+  const near = g.aliveOf(human.team).find((p) => p.bot);
+  near.bot.heard = null;
+  near.bot.onPing({ x: foe.pos.x, y: foe.pos.y, z: foe.pos.z, t: g.time, kind: 'enemy' });
+  res.pingAlerts = !!near.bot.heard;
+
+  // F) synchronized execute: the squad commits the main group together (execAt)
+  att.executed = false;
+  for (const p of att.aliveBots()) p.bot.execAt = 0;
+  g.roundT = 40; // clock pressure forces the commit
+  for (let i = 0; i < 3; i++) { att.reactT = 0; att.update(0.05); }
+  res.executeFires = att.posture === 'save' || (att.executed && att.aliveBots().some((p) => p.bot.execAt > 0));
+
+  // G) cover-node selection always returns a spot that truly breaks LOS
+  let coverWrong = 0, coverFound = 0;
+  for (const p of g.aliveOf('order').concat(g.aliveOf('death'))) {
+    if (!p.bot) continue;
+    const threat = { x: p.pos.x + 8, y: p.pos.y, z: p.pos.z, t: g.time };
+    p.bot.coverPos = null; p.bot.coverT = 0;
+    const cover = p.bot.seekCover([threat]);
+    if (!cover) continue;
+    coverFound++;
+    if (g.world.segmentClear(cover.x, cover.y + 1.1, cover.z, threat.x, threat.y + 1.1, threat.z)) coverWrong++;
+  }
+  res.coverBreaksLOS = coverWrong === 0;
+
+  // H) adaptation: a resolved round drifts both squads' confidence
+  const oc0 = g.squads.order.confidence, dc0 = g.squads.death.confidence;
+  g.endRound(g.defendingTeam(), 'time');
+  res.confidenceDrifts = g.squads.order.confidence !== oc0 && g.squads.death.confidence !== dc0;
+
+  g.comms.emit = origEmit;
+  res.cats = `coverFound=${coverFound} ` + Object.entries(cats).map(([k, v]) => `${k}:${v}`).join(' ');
+  return res;
+});
+const squadCats = squad.cats; delete squad.cats;
+for (const [k, v] of Object.entries(squad)) check(v === true, `squad: ${k}`);
+log('   comms + cover:', squadCats);
+const squadErrs = realErrors();
+check(squadErrs.length === 0, `no console errors in squad scenario (${squadErrs.length})`);
+if (squadErrs.length) log('   errors:', squadErrs.slice(0, 5));
+
 await browser.close();
 log(failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

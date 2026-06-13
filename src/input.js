@@ -7,6 +7,7 @@ export const DEFAULT_BINDS = {
   slot1: 'Digit1', slot2: 'Digit2', slot3: 'Digit3', slot4: 'Digit4', slot5: 'Digit5',
   potion: 'KeyQ', broom: 'KeyC', cloak: 'KeyF', apparate: 'KeyG', finite: 'KeyX', portkey: 'KeyV',
   cast: 'Mouse0', altcast: 'Mouse2',
+  commsWheel: 'KeyT', ping: 'KeyZ',
 };
 
 export const BIND_LABELS = {
@@ -17,6 +18,7 @@ export const BIND_LABELS = {
   potion: 'Drink Potion', broom: 'Broomstick (fly)', cloak: 'Invisibility Cloak', apparate: 'Apparate',
   finite: 'Finite (Cleanse Self)', portkey: 'Emergency Portkey',
   cast: 'Cast Spell', altcast: 'Protego Shield',
+  commsWheel: 'Command Wheel (hold)', ping: 'Ping (look + tap)',
 };
 
 export function keyLabel(code) {

@@ -15,6 +15,31 @@ await page.evaluate(() => {
 await page.waitForTimeout(400);
 await page.screenshot({ path: 'shots/hud.png' });
 
+// comms feed: stack a few teammate callouts (bot voice subtitles)
+await page.evaluate(() => {
+  const g = window.__game;
+  const team = g.human.team;
+  const lines = [
+    ['Ginny', 'Contact site A — two of them!'],
+    ['Neville', 'Planting, cover me.'],
+    ['Dumbledore', 'Rotate B, they overloaded A.'],
+    ['Ginny', 'Nice — one down!'],
+  ];
+  for (const [name, text] of lines) g.hud.comms(name, text, team);
+});
+await page.waitForTimeout(250);
+await page.screenshot({ path: 'shots/comms-feed.png' });
+
+// radial command wheel (hold-to-open), with a slice highlighted
+await page.evaluate(() => {
+  const g = window.__game;
+  g.hud.openWheel();
+  g.hud.wheelMove(0, -140); // push the cursor up onto the top slice
+});
+await page.waitForTimeout(250);
+await page.screenshot({ path: 'shots/command-wheel.png' });
+await page.evaluate(() => window.__game.hud.clearWheel());
+
 // buy menu
 await page.evaluate(() => { window.__game.hud.openBuy(true); });
 await page.waitForTimeout(250);

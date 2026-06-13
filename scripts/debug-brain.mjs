@@ -19,7 +19,10 @@ const out = await page.evaluate(() => {
     const b = p.bot;
     rows.push({
       name: p.name, char: p.char.id, pos: [+p.pos.x.toFixed(1), +p.pos.z.toFixed(1)],
+      role: b.role?.squadRole ?? null, group: b.role?.group ?? null,
       viaIdx: b.role?.viaIdx, via: b.role?.via?.length, type: b.role?.type,
+      order: b.order ? (b.order.type + (b.order.site ? ':' + b.order.site : '')) : null,
+      execIn: b.execAt ? +(b.execAt - g.time).toFixed(1) : 0,
       move: [+p.ctrl.moveX.toFixed(2), +p.ctrl.moveZ.toFixed(2)],
       path: b.path ? b.path.length : null, pathIdx: b.pathIdx,
       goal: b.pathGoal ? [+b.pathGoal.x.toFixed(0), +b.pathGoal.z.toFixed(0)] : null,
@@ -30,7 +33,14 @@ const out = await page.evaluate(() => {
       time: +g.time.toFixed(1), roundT: +g.roundT.toFixed(1),
     });
   }
-  return rows;
+  // squad coordinator snapshot: strategy, economy, roles, learned adaptation
+  const squadDump = (s) => ({
+    team: s.team, attacking: s.attacking(), strat: s.strat, posture: s.posture,
+    site: s.site, executed: s.executed, leader: s.leader()?.name ?? null,
+    confidence: +s.confidence.toFixed(2), reads: s.reads,
+    roles: s.aliveBots().map((p) => `${p.char.id}:${p.bot.role?.squadRole}@${p.bot.role?.site || p.bot.role?.holdKey || '?'}`),
+  });
+  return { round: g.roundNum, attacking: g.attackingTeam, bots: rows, squads: { order: squadDump(g.squads.order), death: squadDump(g.squads.death) } };
 });
 console.log(JSON.stringify(out, null, 1));
 await browser.close();

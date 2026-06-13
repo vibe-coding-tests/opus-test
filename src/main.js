@@ -15,6 +15,9 @@ const DEFAULT_SETTINGS = {
   sens: 1.0,
   fov: 90, // horizontal FOV, CS-style
   volume: 0.7,
+  voiceVolume: 0.85, // bot voice barks, relative to master
+  subtitles: true,   // show teammate callouts in the comms feed
+  chatter: 0.7,      // 0..1 density of low-priority bot chatter
   showFps: false,
   juice: true, // cinematic hitstop + slow-mo on the big moments
   performanceMode: false,
@@ -149,6 +152,7 @@ const menus = new Menus(uiEl, {
   settings, audio, input,
   saveSettings, applySettings,
   startGame, quitToMenu, resumeGame,
+  getGame: () => game,
 });
 
 function startGame(setup, { requestLock = true, loading = true } = {}) {
@@ -245,6 +249,7 @@ function pauseGame() {
   if (!game || game.over) return;
   paused = true;
   game.paused = true;
+  hud.clearWheel?.();
   hud.openBuy(false);
   menus.showLockOverlay(false);
   menus.showPause();
@@ -255,6 +260,10 @@ function pauseGame() {
 // open the pause menu. The keydown path below only fires while unlocked
 // (paused / buy menu), where it acts as back/resume.
 window.addEventListener('keydown', (e) => {
+  if (e.code === 'F9' && !input.rebind) {
+    if (menus.toggleDebugCheats()) e.preventDefault();
+    return;
+  }
   if (e.code === 'Escape') {
     if (game && !game.over) {
       if (hud.buyOpen) { hud.openBuy(false); return; }

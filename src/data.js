@@ -327,6 +327,159 @@ export const BOT_NAMES = {
   ],
 };
 
+// ----------------------------------------------------------------- VOICE ---
+// Procedural "wizard murmur" voice per champion (see audio.voice). No speech
+// files: a pitched formant utterance, so Bellatrix shrieks and Voldemort
+// rasps low. pitch=fundamental Hz, shift=formant brightness, rasp=breath/growl
+// mix, wobble=vibrato, rate=syllable length, syl=preferred syllable count.
+export const DEFAULT_VOICE = { pitch: 160, shift: 1, rasp: 0.05, wobble: 0.05, rate: 1, syl: 0 };
+export const VOICE = {
+  harry: { pitch: 152, shift: 1.0, rasp: 0.04 },
+  hermione: { pitch: 198, shift: 1.06, rate: 0.95 },
+  ron: { pitch: 138, shift: 0.98, rasp: 0.06 },
+  luna: { pitch: 210, shift: 1.12, wobble: 0.1, rate: 1.25 },
+  snape: { pitch: 104, shift: 0.9, rasp: 0.1, wobble: 0.03, rate: 1.2 },
+  bellatrix: { pitch: 232, shift: 1.16, rasp: 0.16, wobble: 0.13 },
+  voldemort: { pitch: 90, shift: 0.8, rasp: 0.22, wobble: 0.03, rate: 1.1 },
+  draco: { pitch: 166, shift: 1.04 },
+  dumbledore: { pitch: 116, shift: 0.94, rasp: 0.07, rate: 1.2 },
+  mcgonagall: { pitch: 184, shift: 1.0, rate: 1.05 },
+  ginny: { pitch: 192, shift: 1.05 },
+  neville: { pitch: 146, shift: 0.99, rasp: 0.07 },
+  lucius: { pitch: 128, shift: 0.95, rate: 1.15 },
+  greyback: { pitch: 98, shift: 0.84, rasp: 0.36, wobble: 0.06 },
+  umbridge: { pitch: 226, shift: 1.2, wobble: 0.06, rate: 1.1 },
+  wormtail: { pitch: 172, shift: 1.06, rasp: 0.18, wobble: 0.07 },
+};
+export const voiceFor = (charId) => ({ ...DEFAULT_VOICE, ...(VOICE[charId] || {}) });
+
+// ----------------------------------------------------------------- LINES ---
+// Callout banks keyed by comms category. Each has a generic pool (`_`) plus
+// optional per-champion flavor so the same situation sounds like the wizard
+// saying it. Tokens {area} and {name} are filled in by the comms layer.
+export const LINES = {
+  contact: {
+    _: ['Contact {area}!', 'Enemy {area}!', 'One spotted {area}.', "They're {area}!", 'Eyes {area}!'],
+    harry: ['Contact {area} — on me!'],
+    hermione: ['Enemy {area}, smoke ready.'],
+    ron: ['Oi, one {area}!'],
+    luna: ["Something's {area}... or someone.", 'A wrackspurt {area}, I think.'],
+    snape: ['Movement. {area}.'],
+    bellatrix: ['Found a plaything {area}!', 'I see you {area}!'],
+    voldemort: ['A fool reveals himself. {area}.'],
+    draco: ['One {area} — sort it out.'],
+    mcgonagall: ['Enemy {area}. Hold the line.'],
+    greyback: ['I smell one {area}.'],
+    umbridge: ['Intruder {area}. Noted.'],
+    wormtail: ["S-someone's {area}!"],
+  },
+  kill: {
+    _: ['Got one!', 'Down!', 'Tagged him!', 'One down!', 'Scratch one.'],
+    harry: ['Got one — keep pushing!'],
+    hermione: ['Target down.'],
+    ron: ['Bloody hell, got him!'],
+    luna: ["Oh, he's gone now."],
+    snape: ['Pathetic.', 'Spare me.'],
+    bellatrix: ['Hahaha! Did you see that?!', 'Another one for me!'],
+    voldemort: ['As it should be.', 'Weak.'],
+    draco: ['Easy. My father will hear of this.'],
+    ginny: ["That all you've got?"],
+    mcgonagall: ['Detention.'],
+    greyback: ['Fresh meat.', 'Mine now.'],
+    umbridge: ['Hem hem. Discipline.'],
+    lucius: ['Predictable.'],
+  },
+  need: {
+    _: ['Need backup {area}!', 'Help {area}!', 'Trade me {area}!', "I'm pinned {area}!"],
+    ron: ['Little help here?!'],
+    wormtail: ['H-help! Please!'],
+    neville: ['Holding but hurt — back me up!'],
+  },
+  status: {
+    _: ['Low HP, falling back.', 'Reloading — cover me.', "I'm hurt.", 'Need a sec.'],
+    bellatrix: ['Just a scratch!'],
+    neville: ["I'm not going down."],
+  },
+  objective: {
+    _: ["Relic's down {area}.", 'Planting — cover me!', 'On the defuse!', 'Get to site!'],
+    hermione: ['Defusing, hold them off!'],
+    ron: ['Planting it, watch my back!'],
+  },
+  banter: {
+    _: ['Stay sharp.', "Let's run it.", 'Standard — watch flanks.', 'Quiet... too quiet.'],
+    bellatrix: ['I do love a good duel!', 'Come out, come out...'],
+    luna: ['The nargles are restless today.'],
+    ron: ["I've got a bad feeling about this."],
+    snape: ['Do try not to die.'],
+    voldemort: ['Do not disappoint me.'],
+    umbridge: ['Naughty, naughty.'],
+    greyback: ["Hunt's on."],
+    draco: ['Try to keep up.'],
+    dumbledore: ['Steady, everyone.'],
+  },
+  ack: {
+    _: ['Copy.', 'On it.', 'Moving.', 'Roger.', 'Got it.'],
+    bellatrix: ['With pleasure!'],
+    snape: ['...Fine.'],
+    wormtail: ['O-okay!'],
+    draco: ['If I must.'],
+    greyback: ['Hngh.'],
+  },
+  refuse: {
+    _: ['Negative, holding.', "Can't — I'm pinned.", "You go, I've got this angle."],
+    wormtail: ["I-I'd rather not..."],
+    snape: ['I think not.'],
+    luna: ["I'll wander, thanks."],
+  },
+  report: {
+    _: ['{area}, all good.', '{area}, low HP.', 'Holding {area}.', 'Alive, {area}.'],
+  },
+  clutch: {
+    _: ["It's just me — wish me luck.", '1 v many. Watch this.', 'Clutch time.'],
+    bellatrix: ['Just me and you now!'],
+    voldemort: ['Alone is how I prefer it.'],
+    harry: ['Not over yet.'],
+  },
+  revenge: {
+    _: ["That's for {name}!", "You'll pay for {name}!", 'Avenged.'],
+  },
+};
+
+// Squad strategy calls (Phase 3) — the in-round "plan" the leader announces.
+export const PLAN_LINES = {
+  rushA: ['Rush A — all in, go go!', 'Hit A hard!'],
+  rushB: ['Everyone B! Fast!', 'Stack B, go!'],
+  split: ['Split it — I take the flank.', 'Two here, rest the other way.'],
+  default: ['Default. Take map control.', 'Slow it — gather info.'],
+  save: ['Save it, play next round.', "Eco — don't waste it."],
+  fake: ['Fake A, rotate on my call.', 'Bait it out, then swing.'],
+  retake: ['Retake together — on my count.', 'Group up, we take it back.'],
+  stackA: ['Stack A, they love it.', 'Anchor A heavy.'],
+  stackB: ['Hold B in force.', 'Weight B.'],
+};
+
+const _fill = (line, ctx = {}) => line
+  .replace('{area}', ctx.area || 'mid')
+  .replace('{name}', ctx.name || 'someone');
+
+// Pick a callout for a category, biased toward the champion's own flavor.
+export function pickLine(cat, charId, ctx = {}) {
+  const bank = LINES[cat];
+  if (!bank) return null;
+  const generic = bank._ || [];
+  const flavor = bank[charId] || null;
+  let pool;
+  if (flavor && flavor.length) pool = Math.random() < 0.6 ? flavor : generic.concat(flavor);
+  else pool = generic;
+  if (!pool.length) return null;
+  return _fill(pool[(Math.random() * pool.length) | 0], ctx);
+}
+
+export function pickPlan(strat) {
+  const pool = PLAN_LINES[strat] || PLAN_LINES.default;
+  return pool[(Math.random() * pool.length) | 0];
+}
+
 // ----------------------------------------------------------------- WANDS ---
 export const WANDS = [
   { id: 'training', name: 'Training Wand', price: 0, power: 0.84, cast: 0.98, spread: 1.35, manaMult: 1.0, castPoint: { fwd: 0.45, right: 0.13, up: -0.16 }, desc: 'School-issue practice wand. Forgiving enough to fight, still clearly outclassed.' },

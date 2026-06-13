@@ -76,6 +76,8 @@ export class Bot {
     this.peekT = rand(6, 14);
     this.goSlowUntil = 0;   // cautious attackers stagger their push
     this.retreating = 0;
+    this.coverPos = null;   // cached cover node when falling back
+    this.coverT = 0;        // when to recompute cover
     this.ignoreUntil = 0;   // stale-duel breaker: look away and flank
     this.lastPos = new THREE.Vector3();
     this.seenCorpses = new Set(); // teammate deaths this bot has noticed
@@ -101,6 +103,9 @@ export class Bot {
     this.saving = false;    // eco: hiding out the round to keep gear
     this.saveSpot = null;
     this.saveEvalT = rand(1, 3);
+    this.order = null;      // a player command (game.command) this bot is obeying
+    this.orderPush = 0;     // until-time of a "push" order (forces commitment)
+    this.execAt = 0;        // squad-synchronized execute time (0 = none)
   }
 
   // ---------------------------------------------------------------- round ---
@@ -121,6 +126,8 @@ export class Bot {
     this.peek = null;
     this.peekT = rand(6, 14);
     this.retreating = 0;
+    this.coverPos = null;
+    this.coverT = 0;
     this.seenCorpses.clear();
     this.search = null;
     this.aware.clear();
@@ -133,6 +140,10 @@ export class Bot {
     this.heard = null;
     this.saving = false;
     this.saveSpot = null;
+    this.order = null;
+    this.orderPush = 0;
+    this.execAt = 0;
+    this.hurtCalled = false; // one low-HP callout per wound, reset on heal/round
     this.executedAt = -99; // site-execute utility: once per push
     // timing variety: cautious wizards let the round breathe before committing;
     // Bellatrix is already running at you
@@ -145,15 +156,16 @@ export class Bot {
     }
   }
 
-  buy() {
+  buy(force = false) {
     const g = this.game;
     const p = this.p;
     const u = this.skill.util;
     const ai = this.ai;
     // eco discipline: patient wizards save up for a proper buy; smart ones
-    // recognize a broke round and full-save
+    // recognize a broke round and full-save. A squad force-buy overrides the
+    // floor — everyone spends together to break a losing streak.
     const ecoFloor = 1100 + (1 - ai.aggro) * 1100 + this.skill.iq * 400;
-    if (p.money < ecoFloor && p.wand.id === 'training') return;
+    if (!force && p.money < ecoFloor && p.wand.id === 'training') return;
     // wand upgrade
     if (p.wand.id === 'training') {
       const affordable = WANDS.filter((w) => w.price > 0 && w.price * p.priceMult() <= p.money - 400);
@@ -214,6 +226,15 @@ export class Bot {
     if (this.thinkT <= 0) {
       this.thinkT = 0.13;
       this.think();
+    }
+
+    // a fresh wound past two-thirds draws a hurt callout (once, until patched up)
+    const lowHp = p.stats.hp * 0.33;
+    if (!this.hurtCalled && p.health <= lowHp) {
+      this.hurtCalled = true;
+      g.comms.say(p, 'status', { scope: 'team', pos: p.pos, mood: 'hurt', chance: 0.6 });
+    } else if (this.hurtCalled && p.health > p.stats.hp * 0.5) {
+      this.hurtCalled = false;
     }
 
     // utility cast in flight: hold spell + trigger on the SIM clock until it
@@ -416,6 +437,10 @@ export class Bot {
       }
     }
 
+    // a standing player command (follow / hold / fall back / rally) outranks
+    // roaming, trades and the default objective — but never an active fight
+    if (this.applyOrder()) return;
+
     // a teammate just died nearby: loyal wizards turn to trade the kill,
     // lurkers note it and keep flanking
     const trade = this.tradeOpportunity();
@@ -467,6 +492,80 @@ export class Bot {
     if (p.equip.cloak > 0 && p.cloakT <= 0 && this.ai.lurk > 0.5 && this.role.type === 'attack' &&
         g.roundT < 90 && g.roundT > 40 && !p.hasRelic) {
       p.useEquip('cloak');
+    }
+  }
+
+  // -------------------------------------------------------- player commands ---
+  // How likely this bot is to obey a given order: loyal team players comply,
+  // lurkers and the rat freelance. Calls for help / retreats get more yeses.
+  orderCompliance(o) {
+    const ai = this.ai;
+    let base = 0.45 + ai.team * 0.5 - ai.lurk * 0.3;
+    if (o.type === 'rally' || o.type === 'fallback') base += 0.2;
+    if (this.p.char.id === 'wormtail') base -= 0.3;
+    return Math.random() < clamp(base, 0.08, 0.97);
+  }
+
+  // Consume a standing order. Returns true if it fully drove movement this tick
+  // (so think() should stop), false if it only nudged state and play continues.
+  applyOrder() {
+    const o = this.order;
+    if (!o) return false;
+    const g = this.game, p = this.p, ctrl = p.ctrl;
+    if (g.time > o.until) { this.order = null; return false; }
+    if (!o.obey || p.hasRelic) return false; // refusers and the carrier do their own thing
+    switch (o.type) {
+      case 'go': {
+        const site = g.world.zones[`site${o.site}`];
+        if (this.role?.type === 'defend' && site) {
+          const center = { x: site.cx, y: p.pos.y, z: site.cz };
+          this.holdSpot = this.pickHoldNear(center, 3, 11);
+          this.holdFaceYaw = yawTo(this.holdSpot, center);
+        } else if (this.role) {
+          this.role.site = o.site; this.role.via = null; this.role.viaIdx = 0; this.holdSpot = null;
+        }
+        return false;
+      }
+      case 'push':
+        this.goSlowUntil = 0; this.saving = false; this.orderPush = o.until;
+        return false;
+      case 'hold': {
+        const spot = o.pos || this.holdSpot || { x: p.pos.x, y: p.pos.y, z: p.pos.z };
+        this.holdSpot = spot;
+        this.holdAt(spot, o.face ?? p.yaw);
+        return true;
+      }
+      case 'fallback': {
+        this.saving = false;
+        const to = o.pos;
+        if (Math.hypot(p.pos.x - to.x, p.pos.z - to.z) > 3) { this.goTo(to.x, to.y, to.z, 2); this.faceWalk(to.x, to.z); }
+        else { ctrl.moveX = 0; ctrl.moveZ = 0; }
+        return true;
+      }
+      case 'follow': {
+        const t = o.target;
+        if (!t || !t.alive) { this.order = null; return false; }
+        const d = Math.hypot(p.pos.x - t.pos.x, p.pos.z - t.pos.z);
+        if (d > 5.5) { this.goTo(t.pos.x, t.pos.y, t.pos.z, 3.5); this.faceWalk(t.pos.x, t.pos.z); }
+        else { ctrl.moveX = 0; ctrl.moveZ = 0; this.aimYaw = t.yaw; }
+        return true;
+      }
+      case 'rally': {
+        const to = o.pos;
+        if (Math.hypot(p.pos.x - to.x, p.pos.z - to.z) > 4) { this.goTo(to.x, to.y, to.z, 2.5); this.faceWalk(to.x, to.z); return true; }
+        return false; // arrived — defend the area normally
+      }
+    }
+    return false;
+  }
+
+  // A player ping landed: glance at it, and maybe go investigate an enemy mark.
+  onPing(mark) {
+    const g = this.game, p = this.p;
+    if (Math.hypot(mark.x - p.pos.x, mark.z - p.pos.z) > 45) return;
+    this.heard = { x: mark.x, y: mark.y, z: mark.z, t: g.time, loud: 14 };
+    if (mark.kind === 'enemy' && !this.target && this.role.type !== 'defend' && !this.saving && Math.random() < this.skill.iq) {
+      this.search = { x: mark.x, y: mark.y, z: mark.z, until: g.time + 4, sweepDir: Math.random() < 0.5 ? 1 : -1 };
     }
   }
 
@@ -811,8 +910,14 @@ export class Bot {
     let mx = perp.x * this.strafeDir * sk.strafe;
     let mz = perp.z * this.strafeDir * sk.strafe;
     if (this.retreating > 0) {
-      // falling back: sprint away while spraying over the shoulder
-      mx -= toE.x * 1.0; mz -= toE.z * 1.0;
+      // falling back: break for cover that kills the angle if any is close,
+      // otherwise sprint straight away while spraying over the shoulder
+      const cover = sk.iq > 0.35 ? this.seekCover(this.threatsNow()) : null;
+      if (cover) {
+        const cx = cover.x - p.pos.x, cz = cover.z - p.pos.z;
+        const cl = Math.hypot(cx, cz);
+        if (cl > 0.5) { mx = cx / cl; mz = cz / cl; } else { mx -= toE.x; mz -= toE.z; }
+      } else { mx -= toE.x; mz -= toE.z; }
       if (p.dashCD <= 0 && p.dashT <= 0 && Math.random() < sk.iq * 0.04) p.tryDash(-toE.x, -toE.z);
       if (p.equip.broom > 0 && !p.flying) p.useEquip('broom');
       // desperate and far from help: rip the emergency portkey
@@ -827,8 +932,8 @@ export class Bot {
       const pref = ai.range;
       // attackers can't camp a staring contest: clock pressure or a stale
       // long-range duel forces the commit (this is what breaks mid standoffs)
-      const press = this.role.type === 'attack' && g.mode !== 'dm' &&
-        (g.roundT < 50 || this.visT > 10) && g.relic.state !== 'planted';
+      const press = (this.role.type === 'attack' && g.mode !== 'dm' &&
+        (g.roundT < 50 || this.visT > 10) && g.relic.state !== 'planted') || g.time < this.orderPush;
       if (press) {
         const push = 0.5 + ai.aggro * 0.5;
         mx += toE.x * push; mz += toE.z * push;
@@ -1080,8 +1185,9 @@ export class Bot {
           return;
         }
       }
-      // late-round commit: stop holding and converge on the target site
-      if (relic.state === 'carried' && this.game.roundT < 38) {
+      // late-round commit OR a squad-synchronized execute: stop holding and
+      // converge on the target site so the hit lands together, not in a trickle
+      if (relic.state === 'carried' && (this.game.roundT < 38 || (this.execAt && g.time >= this.execAt))) {
         const site = g.world.zones[`site${role.site || 'A'}`];
         if (site) {
           this.siteExecute(site.cx, site.cz, ['lumos', 'fumos', 'bombarda']);
@@ -1197,10 +1303,57 @@ export class Bot {
     }
   }
 
+  // fresh remembered enemy positions (plus a live target) for danger-aware moves
+  threatsNow() {
+    const g = this.game, p = this.p, out = [];
+    const mem = g.teamMemory[p.team];
+    if (mem) for (const m of mem.values()) {
+      if (m.name === 'Relic') continue; // the bomb isn't shooting at anyone
+      if (g.time - m.t < 6) out.push(m);
+    }
+    if (this.target?.alive) out.push({ x: this.target.pos.x, y: this.target.pos.y, z: this.target.pos.z });
+    return out;
+  }
+
+  // nearest reachable nav node that breaks line of sight to the known threats
+  // and doesn't walk us closer to them — cached briefly to avoid path churn
+  seekCover(threats) {
+    const g = this.game, p = this.p;
+    if (this.coverPos && g.time < this.coverT) return this.coverPos;
+    this.coverT = g.time + 0.6;
+    if (!threats || !threats.length) { this.coverPos = null; return null; }
+    const nodes = g.world.nodesNear(p.pos.x, p.pos.y, p.pos.z, 11);
+    let best = null, bestScore = -Infinity;
+    for (const n of nodes) {
+      const nd = Math.hypot(n.x - p.pos.x, n.z - p.pos.z);
+      if (nd < 1.5) continue;
+      let covered = true, minThreat = Infinity;
+      for (const t of threats) {
+        const ty = (t.y ?? p.pos.y) + 1.1;
+        if (g.world.segmentClear(n.x, n.y + 1.1, n.z, t.x, ty, t.z)) { covered = false; break; }
+        minThreat = Math.min(minThreat, Math.hypot(n.x - t.x, n.z - t.z));
+      }
+      if (!covered) continue;
+      const score = minThreat - nd * 0.6; // close cover that keeps the gap
+      if (score > bestScore) { bestScore = score; best = n; }
+    }
+    this.coverPos = best ? { x: best.x, y: best.y, z: best.z } : null;
+    return this.coverPos;
+  }
+
   pickHoldNear(pos, rMin, rMax) {
     const nodes = this.game.world.nodesNear(pos.x, pos.y, pos.z, rMax);
     const ok = nodes.filter((n) => Math.hypot(n.x - pos.x, n.z - pos.z) > rMin);
-    const n = ok.length ? choice(ok) : (nodes.length ? choice(nodes) : { x: pos.x, y: pos.y, z: pos.z });
+    const pool = ok.length ? ok : nodes;
+    if (!pool.length) return { x: pos.x, y: pos.y, z: pos.z };
+    // after contact, favour a spot that still holds the angle but sits in cover
+    const threats = this.threatsNow();
+    if (threats.length) {
+      const covered = pool.filter((n) => threats.some((t) =>
+        !this.game.world.segmentClear(n.x, n.y + 1.1, n.z, t.x, (t.y ?? n.y) + 1.1, t.z)));
+      if (covered.length) { const c = choice(covered); return { x: c.x, y: c.y, z: c.z }; }
+    }
+    const n = choice(pool);
     return { x: n.x, y: n.y, z: n.z };
   }
 
