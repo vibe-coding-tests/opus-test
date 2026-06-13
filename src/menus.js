@@ -3,7 +3,7 @@
 import { CHARACTERS, WANDS, EQUIPMENT, EQUIP_EFFECTS, TEAM, TEAM_INFO, MAP_LIST, DIFFICULTIES, FORMATS, DISCIPLINES, SPELLS } from './data.js';
 import { MAP_BUILDERS } from './maps/index.js';
 import { bakeRadar } from './mapbuilder.js';
-import { el, clamp } from './utils.js';
+import { el, clamp, fmtKDA } from './utils.js';
 import { BIND_LABELS, keyLabel, DEFAULT_BINDS } from './input.js';
 import { spellIcon } from './hud.js';
 
@@ -816,19 +816,30 @@ export class Menus {
       el('div', 'sb-team-name', sec, TEAM_INFO[team].name);
       const table = el('table', 'sb-table', sec);
       const hr = el('tr', '', el('thead', '', table));
-      for (const hcell of ['Player', 'K', 'A', 'D', 'HS', 'DMG', 'OBJ', '★']) el('th', '', hr, hcell);
+      const headers = game.mode === 'dm'
+        ? ['Player', 'K', 'A', 'D', 'KDA', 'HS', 'DMG']
+        : ['Player', 'K', 'A', 'D', 'HS', 'DMG', 'OBJ', '★'];
+      for (const hcell of headers) el('th', '', hr, hcell);
       const tb = el('tbody', '', table);
-      for (const q of game.teamPlayers(team).sort((a, b) => mvpScore(b) - mvpScore(a))) {
+      const players = game.teamPlayers(team).sort((a, b) => (
+        game.mode === 'dm'
+          ? b.kills - a.kills || (b.kills + b.assists) / Math.max(1, b.deaths) - (a.kills + a.assists) / Math.max(1, a.deaths)
+          : mvpScore(b) - mvpScore(a)
+      ));
+      for (const q of players) {
         const tr = el('tr', q.isHuman ? 'me' : '', tb);
         const nameTd = el('td', 'sb-name', tr, q.isHuman ? `★ ${q.char.name}` : q.name);
         if (!q.isHuman && !q.char.name.includes(q.name)) el('span', 'sb-champ', nameTd, q.char.name.split(' ').pop());
         el('td', '', tr, String(q.kills));
         el('td', '', tr, String(q.assists));
         el('td', '', tr, String(q.deaths));
+        if (game.mode === 'dm') el('td', '', tr, fmtKDA(q));
         el('td', '', tr, String(q.hsK));
         el('td', '', tr, String(Math.round(q.dmgDealt)));
-        el('td', '', tr, String(q.plants + q.defuses));
-        el('td', 'sb-star', tr, q.mvps ? '★'.repeat(Math.min(q.mvps, 5)) : '');
+        if (game.mode !== 'dm') {
+          el('td', '', tr, String(q.plants + q.defuses));
+          el('td', 'sb-star', tr, q.mvps ? '★'.repeat(Math.min(q.mvps, 5)) : '');
+        }
       }
     }
 

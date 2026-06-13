@@ -42,6 +42,8 @@ export const fmtTime = (s) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
+export const fmtKDA = (p) => ((p.kills + p.assists) / Math.max(1, p.deaths)).toFixed(2);
+
 let _uid = 1;
 export const uid = () => _uid++;
 

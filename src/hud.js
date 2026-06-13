@@ -2,7 +2,7 @@
 // buy menu, death screen, announcer, damage numbers and indicators.
 import * as THREE from 'three';
 import { SPELLS, WANDS, EQUIPMENT, TEAM, TEAM_INFO, ROUND, SLOT3, SLOT5, DASH, wandById } from './data.js';
-import { el, clamp, fmtTime, hexCss, lerp } from './utils.js';
+import { el, clamp, fmtTime, fmtKDA, hexCss, lerp } from './utils.js';
 import { keyLabel } from './input.js';
 
 const DEG_R = Math.PI / 180;
@@ -745,9 +745,16 @@ export class HUD {
       el('div', 'sb-team-name', sec, `${TEAM_INFO[team].name}${role}`);
       const table = el('table', 'sb-table', sec);
       const hr = el('tr', '', el('thead', '', table));
-      for (const hcell of ['', 'Player', 'K', 'A', 'D', 'HS', 'DMG', 'OBJ', '★', 'ɢ']) el('th', '', hr, hcell);
+      const headers = dm
+        ? ['', 'Player', 'K', 'A', 'D', 'KDA', 'HS', 'DMG']
+        : ['', 'Player', 'K', 'A', 'D', 'HS', 'DMG', 'OBJ', '★', 'ɢ'];
+      for (const hcell of headers) el('th', '', hr, hcell);
       const tb = el('tbody', '', table);
-      const members = g.teamPlayers(team).slice().sort((a, b) => (b.kills - b.deaths) - (a.kills - a.deaths) || b.dmgDealt - a.dmgDealt);
+      const members = g.teamPlayers(team).slice().sort((a, b) => (
+        dm
+          ? b.kills - a.kills || (b.kills + b.assists) / Math.max(1, b.deaths) - (a.kills + a.assists) / Math.max(1, a.deaths)
+          : (b.kills - b.deaths) - (a.kills - a.deaths)
+      ) || b.dmgDealt - a.dmgDealt);
       for (const p of members) {
         const tr = el('tr', `${p.alive ? 'alive' : 'dead'}${p.isHuman ? ' me' : ''}`, tb);
         tr.title = p.char.style; // hover a row for the champion's personality
@@ -758,14 +765,19 @@ export class HUD {
         el('td', '', tr, String(p.kills));
         el('td', '', tr, String(p.assists));
         el('td', '', tr, String(p.deaths));
+        if (dm) el('td', '', tr, fmtKDA(p));
         el('td', '', tr, String(p.hsK));
         el('td', '', tr, String(Math.round(p.dmgDealt)));
-        el('td', '', tr, dm ? '—' : String(p.plants + p.defuses));
-        el('td', 'sb-star', tr, dm ? '—' : (p.mvps ? '★'.repeat(Math.min(p.mvps, 5)) + (p.mvps > 5 ? `+${p.mvps - 5}` : '') : ''));
-        el('td', 'sb-money', tr, dm ? '—' : String(Math.round(p.money)));
+        if (!dm) {
+          el('td', '', tr, String(p.plants + p.defuses));
+          el('td', 'sb-star', tr, p.mvps ? '★'.repeat(Math.min(p.mvps, 5)) + (p.mvps > 5 ? `+${p.mvps - 5}` : '') : '');
+          el('td', 'sb-money', tr, String(Math.round(p.money)));
+        }
       }
     }
-    el('div', 'sb-hint', sb, 'K kills · A assists · D deaths · HS headshot kills · OBJ plants+dispels · ★ round MVPs');
+    el('div', 'sb-hint', sb, dm
+      ? 'K kills · A assists · D deaths · KDA (K+A)/D · HS headshot kills'
+      : 'K kills · A assists · D deaths · HS headshot kills · OBJ plants+dispels · ★ round MVPs');
   }
 
   // ----------------------------------------------------------------- radar ---
