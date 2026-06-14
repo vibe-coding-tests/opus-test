@@ -1,4 +1,4 @@
-# Running WizardStrike on Windows
+# Running DuelStrike on Windows
 
 The game runs entirely in your browser, so the only thing Windows needs is Node.js. Install it, start the local server, and play.
 

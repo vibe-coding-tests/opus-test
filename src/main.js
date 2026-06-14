@@ -10,6 +10,7 @@ import { Input } from './input.js';
 import { HUD } from './hud.js';
 import { Menus } from './menus.js';
 import { Game } from './game.js';
+import { ROUND } from './data.js';
 
 const DEFAULT_SETTINGS = {
   sens: 1.0,
@@ -32,9 +33,12 @@ const DEFAULT_SETTINGS = {
   lastSetup: null,
 };
 
+const SETTINGS_KEY = 'duelstrike_settings';
+const LEGACY_SETTINGS_KEY = 'wizardstrike_settings';
+
 function loadSettings() {
   try {
-    const raw = localStorage.getItem('wizardstrike_settings');
+    const raw = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(LEGACY_SETTINGS_KEY);
     if (raw) {
       const s = JSON.parse(raw);
       return { ...DEFAULT_SETTINGS, ...s, crosshair: { ...DEFAULT_SETTINGS.crosshair, ...(s.crosshair || {}) } };
@@ -137,7 +141,7 @@ let paused = false;
 
 function saveSettings() {
   settings.binds = input.serialize();
-  try { localStorage.setItem('wizardstrike_settings', JSON.stringify(settings)); } catch { /* ok */ }
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ok */ }
 }
 
 function applySettings() {
@@ -334,6 +338,7 @@ if (params.get('auto')) {
     difficulty: params.get('diff') || 'normal',
     discipline: params.get('disc') || null,
     format: 'mr8',
+    dmKillTarget: Number(params.get('kills') || ROUND.dmKillTarget),
     // hand-picked lineups (?squad=ginny,neville&foes=greyback,umbridge)
     squad: (params.get('squad') || '').split(',').filter(Boolean),
     foes: (params.get('foes') || '').split(',').filter(Boolean),

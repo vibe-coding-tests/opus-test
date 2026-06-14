@@ -1,4 +1,4 @@
-# WizardStrike 1.6 — Hogwarts Duels
+# DuelStrike 1.6 — Hogwarts Duels
 
 A fully offline, first-person wizard dueling game with Counter-Strike 1.6 rules:
 round-based 5v5 (Order of the Phoenix vs Death Eaters), a plant/dispel objective
@@ -29,7 +29,7 @@ On Windows? See [WINDOWS.md](WINDOWS.md) for setup steps.
   or B and hold **E** to plant. The Order defends — eliminate the attackers, run
   the clock, or hold **E** on a planted Relic to dispel it with Finite
   Incantatem. First to 8 rounds wins; sides swap at halftime.
-- **Deathmatch:** free-for-all warm-up with every spell unlocked.
+- **Deathmatch:** team kill race with every spell unlocked.
 
 ### Maps
 

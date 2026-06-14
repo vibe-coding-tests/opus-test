@@ -628,7 +628,7 @@ export const FORMATS = [
 
 export const ROUND = {
   freeze: 5, time: 105, buyWindow: 20, fuse: 35, plantTime: 3.2, defuseTime: 6,
-  endPause: 6, dmTime: 300, dmRespawn: 2.5,
+  endPause: 6, dmTime: 300, dmRespawn: 2.5, dmKillTarget: 50,
 };
 
 // Blink Dash — the intrinsic, always-available mobility tool that gives the

@@ -17,6 +17,12 @@ export const BLUDGER_HIT = { id: 'bludger', name: 'Bludger', icon: 'bomb', color
 const V = new THREE.Vector3();
 const V2 = new THREE.Vector3();
 
+const NPC_ALERTS = {
+  basilisk: { passive: 28, random: 38, aggro: 42, min: 5.5, max: 9.5, chance: 0.45, provoke: 12 },
+  goblin: { passive: 11, random: 22, aggro: 28, min: 4.0, max: 7.0, chance: 0.5, provoke: 10 },
+  bludger: { passive: 0, random: 30, aggro: 38, min: 3.2, max: 6.2, chance: 0.6, provoke: 8 },
+};
+
 // ambient life per theme
 const LIFE = {
   dust: { birds: 3 },
@@ -149,6 +155,7 @@ export class Environment {
     for (const tc of this.torches) {
       if ((tc.x - pos.x) ** 2 + (tc.y - pos.y) ** 2 + (tc.z - pos.z) ** 2 < (radius * 0.9) ** 2) this.extinguish(tc);
     }
+    this.alertMapNPCs(pos, radius + 9, attacker);
     this.onLoudNoise(pos);
   }
 
@@ -213,6 +220,7 @@ export class Environment {
     // the lure: the ringer's ENEMIES mark the bell and come look
     if (by) this.g.teamMemory[otherTeam(by.team)].set('bell', { x: bell.x, y: bell.y, z: bell.z, t: this.g.time, name: 'bell' });
     this.onLoudNoise(bell);
+    this.alertMapNPCs(bell, 18, by);
     if (by?.isHuman) this.g.hud.notice('The bell tolls — they will come looking.', 'info');
   }
 
@@ -256,21 +264,27 @@ export class Environment {
 
   // ---------------------------------------------------------------- dragon ---
   provoke(shooter) {
+    const target = this.randomExposedPlayer(shooter);
+    this.triggerDragonStrike(target, true, shooter);
+  }
+
+  triggerDragonStrike(target, provoked = false, provoker = null) {
     const d = this.dragon;
     if (!d) return;
     this.g.audio.play('dragon_roar', { pos: d.grp.position, vol: 1 });
-    if (d.state !== 'circle' || this.g.time < d.cdUntil || !shooter?.alive) return;
-    // strafe line: through the shooter, along the dragon's approach
+    if (d.state !== 'circle' || this.g.time < d.cdUntil || !this.canCreatureTarget(target)) return;
+    // strafe line: through the target, along the dragon's approach
     const dp = d.grp.position;
-    const dir = V.set(shooter.pos.x - dp.x, 0, shooter.pos.z - dp.z).normalize();
+    const dir = V.set(target.pos.x - dp.x, 0, target.pos.z - dp.z).normalize();
     d.breath = {
-      sx: shooter.pos.x - dir.x * 9, sz: shooter.pos.z - dir.z * 9,
-      ex: shooter.pos.x + dir.x * 17, ez: shooter.pos.z + dir.z * 17,
-      owner: shooter, t: 0, fired: 0,
+      sx: target.pos.x - dir.x * 9, sz: target.pos.z - dir.z * 9,
+      ex: target.pos.x + dir.x * 17, ez: target.pos.z + dir.z * 17,
+      owner: null, t: 0, fired: 0,
     };
     d.state = 'dive';
     d.stateT = 0;
     d.from = dp.clone();
+    d.huntAt = this.g.time + rand(35, 65);
     // telegraph: a burning line on the ground
     const b = d.breath;
     const steps = Math.ceil(Math.hypot(b.ex - b.sx, b.ez - b.sz) / 1.6);
@@ -280,8 +294,20 @@ export class Environment {
       if (this.world.raycast(x, gy + 1.6, z, 0, 1, 0, 50)) continue; // roofed: safe
       this.g.particles.decal(new THREE.Vector3(x, gy + 0.04, z), new THREE.Vector3(0, 1, 0), 1.1, 0xff3a14, 3.2);
     }
-    this.g.hud.notice('THE DRAGON DESCENDS — clear the burning line!', 'bad');
-    if (shooter.isHuman) this.g.hud.notice('You have angered the dragon.', 'bad');
+    this.g.hud.notice(provoked ? 'THE DRAGON DESCENDS — clear the burning line!' : 'THE DRAGON HUNTS — clear the burning line!', 'bad');
+    if (provoker?.isHuman && provoker !== target) this.g.hud.notice('Your spell woke the dragon.', 'bad');
+    if (target.isHuman) this.g.hud.notice(provoked ? 'The dragon turns on you!' : 'The dragon has spotted you.', 'bad');
+  }
+
+  randomExposedPlayer(prefer = null) {
+    const exposed = [];
+    for (const p of this.g.players) {
+      if (!this.canCreatureTarget(p)) continue;
+      if (this.world.raycast(p.pos.x, p.pos.y + 1.6, p.pos.z, 0, 1, 0, 50)) continue;
+      exposed.push(p);
+      if (prefer === p) exposed.push(p);
+    }
+    return exposed.length ? choice(exposed) : null;
   }
 
   catchSnitch(p) {
@@ -321,6 +347,7 @@ export class Environment {
       this.dragon.state = 'circle';
       this.dragon.breath = null;
     }
+    if (this.dragon) this.dragon.huntAt = this.g.time + rand(22, 40);
     for (const npc of this.mapNpcs) this.resetMapNpc(npc);
     if (dirty) {
       this.world.finalize();
@@ -465,6 +492,16 @@ export class Environment {
   }
 
   // ------------------------------------------------------------- map NPCs ---
+  newMapNpcMind(type) {
+    const a = NPC_ALERTS[type] || NPC_ALERTS.goblin;
+    return {
+      aggroTarget: null,
+      aggroUntil: 0,
+      interestAt: this.g.time + rand(a.min, a.max),
+      noticeAt: 0,
+    };
+  }
+
   buildMapNPCs(configs) {
     for (const cfg of configs) {
       if (cfg.type === 'basilisk') this.buildBasilisk(cfg);
@@ -517,6 +554,7 @@ export class Environment {
       hitR: 1.45, hitY: 0.65, range: cfg.range ?? 28,
       gazeCd: rand(2.0, 4.0), gaze: null, biteCd: rand(0.5, 1.5),
       wiggleT: rand(0, 9),
+      ...this.newMapNpcMind('basilisk'),
     });
   }
 
@@ -554,6 +592,7 @@ export class Environment {
       hp: cfg.hp ?? 34, maxHp: cfg.hp ?? 34, disabledT: 0,
       hitR: 0.6, hitY: 0.8, speed: cfg.speed ?? 2.6,
       alarmCd: rand(0.3, 1.4), stabCd: rand(0.5, 1.4), wiggleT: rand(0, 9),
+      ...this.newMapNpcMind('goblin'),
     });
   }
 
@@ -578,6 +617,7 @@ export class Environment {
       type: 'bludger', cfg, grp, route, routeIdx: 1 % route.length,
       hp: 999, maxHp: 999, disabledT: 0, hitR: 0.62, hitY: 0,
       speed: cfg.speed ?? 10.5, hitCd: rand(0.4, 1.2), spin: rand(4, 8),
+      ...this.newMapNpcMind('bludger'),
     });
   }
 
@@ -598,6 +638,11 @@ export class Environment {
     npc.alarmCd = rand(0.4, 1.4);
     npc.stabCd = rand(0.4, 1.4);
     npc.hitCd = rand(0.4, 1.2);
+    const a = NPC_ALERTS[npc.type] || NPC_ALERTS.goblin;
+    npc.aggroTarget = null;
+    npc.aggroUntil = 0;
+    npc.interestAt = this.g.time + rand(a.min, a.max);
+    npc.noticeAt = 0;
   }
 
   disableMapNpc(npc, dur, hitPos) {
@@ -619,6 +664,7 @@ export class Environment {
       npc.routeIdx = (npc.routeIdx + 1) % npc.route.length;
       npc.hitCd = Math.max(npc.hitCd, 0.8);
       npc.speed = Math.min((npc.cfg.speed ?? 10.5) * 1.45, npc.speed + 2.0);
+      this.provokeMapNpc(npc, pr.owner, hitPos);
       this.g.audio.play('stagger', { pos: hitPos, vol: 0.8 });
       return;
     }
@@ -631,6 +677,8 @@ export class Environment {
       if (pr.owner?.isHuman) {
         this.g.hud.notice(npc.type === 'basilisk' ? 'The basilisk recoils into the pipes.' : `${npc.cfg.name || 'Goblin'} retreats!`, 'good');
       }
+    } else {
+      this.provokeMapNpc(npc, pr.owner, hitPos);
     }
   }
 
@@ -648,13 +696,112 @@ export class Environment {
     }
   }
 
+  combatLive() {
+    return this.g.mode === 'dm' || this.g.state === 'live';
+  }
+
+  canCreatureTarget(p) {
+    return !!p && p.alive && (p.spawnProtT ?? 0) <= 0 && (p.cloakT ?? 0) <= 0;
+  }
+
+  creatureCanSee(from, target, range, yOff = 0.8) {
+    if (!this.canCreatureTarget(target)) return false;
+    const d2 = (target.pos.x - from.x) ** 2 + (target.pos.z - from.z) ** 2;
+    if (d2 >= range * range || Math.abs(target.pos.y - from.y) > 6.0) return false;
+    const bodyH = target.body?.height ?? 1.8;
+    return this.world.segmentClear(from.x, from.y + yOff, from.z, target.pos.x, target.pos.y + bodyH * 0.55, target.pos.z);
+  }
+
+  randomVisiblePlayer(from, range, yOff = 0.8, prefer = null) {
+    const pool = [];
+    for (const p of this.g.players) {
+      if (!this.creatureCanSee(from, p, range, yOff)) continue;
+      pool.push(p);
+      if (prefer === p) pool.push(p);
+    }
+    return pool.length ? choice(pool) : null;
+  }
+
+  mapNpcNotice(npc, target, reason) {
+    if (!target.isHuman || this.g.time < npc.noticeAt) return;
+    const name = npc.cfg?.name || 'Goblin';
+    const text = npc.type === 'basilisk'
+      ? (reason === 'provoked' ? 'The basilisk has your scent.' : 'The basilisk is hunting you.')
+      : npc.type === 'bludger'
+        ? (reason === 'provoked' ? 'The bludger locks onto you!' : 'A bludger breaks toward you!')
+        : (reason === 'provoked' ? `${name} is coming for you!` : `${name} picked you out!`);
+    this.g.hud.notice(text, 'bad');
+    npc.noticeAt = this.g.time + 6;
+  }
+
+  setMapNpcAggro(npc, target, reason = 'random') {
+    if (!this.canCreatureTarget(target)) return null;
+    const a = NPC_ALERTS[npc.type] || NPC_ALERTS.goblin;
+    npc.aggroTarget = target;
+    npc.aggroUntil = this.g.time + (reason === 'provoked' ? a.provoke : rand(5, 9));
+    npc.interestAt = this.g.time + rand(a.min, a.max);
+    this.mapNpcNotice(npc, target, reason);
+    if (reason === 'provoked') this.g.noise({ pos: npc.grp.position }, npc.type === 'basilisk' ? 24 : 34);
+    return target;
+  }
+
+  provokeMapNpc(npc, sourcePlayer = null) {
+    const a = NPC_ALERTS[npc.type] || NPC_ALERTS.goblin;
+    const p = npc.grp.position;
+    const target = this.randomVisiblePlayer(p, a.aggro, 0.8, sourcePlayer) ||
+      (this.canCreatureTarget(sourcePlayer) ? sourcePlayer : null);
+    return this.setMapNpcAggro(npc, target, 'provoked');
+  }
+
+  alertMapNPCs(pos, radius, sourcePlayer = null) {
+    if (!this.combatLive()) return;
+    for (const npc of this.mapNpcs) {
+      if (npc.hp <= 0 || npc.disabledT > 0 || !npc.grp?.visible) continue;
+      const p = npc.grp.position;
+      const a = NPC_ALERTS[npc.type] || NPC_ALERTS.goblin;
+      const d2 = (p.x - pos.x) ** 2 + (p.z - pos.z) ** 2;
+      if (d2 > (radius + 6) ** 2) continue;
+      if (sourcePlayer && this.canCreatureTarget(sourcePlayer)) this.provokeMapNpc(npc, sourcePlayer);
+      else if (Math.random() < 0.35) {
+        const target = this.randomVisiblePlayer(p, a.random, 0.8);
+        if (target) this.setMapNpcAggro(npc, target, 'random');
+      }
+    }
+  }
+
+  mapNpcTarget(npc, from, opts = {}) {
+    if (!this.combatLive()) return null;
+    const a = NPC_ALERTS[npc.type] || NPC_ALERTS.goblin;
+    const yOff = opts.yOff ?? 0.8;
+    const aggroRange = opts.aggroRange ?? a.aggro;
+    const passiveRange = opts.passiveRange ?? a.passive;
+    const requireSight = opts.requireSight !== false;
+    const aggro = npc.aggroTarget;
+    if (aggro && this.g.time < npc.aggroUntil && this.canCreatureTarget(aggro)) {
+      const d2 = (aggro.pos.x - from.x) ** 2 + (aggro.pos.z - from.z) ** 2;
+      const closeEnough = d2 < aggroRange * aggroRange && Math.abs(aggro.pos.y - from.y) < 8;
+      if (closeEnough && (!requireSight || this.creatureCanSee(from, aggro, aggroRange, yOff))) return aggro;
+    } else if (aggro) {
+      npc.aggroTarget = null;
+    }
+    if (this.g.time >= npc.interestAt) {
+      npc.interestAt = this.g.time + rand(a.min, a.max);
+      if (Math.random() < (opts.chance ?? a.chance)) {
+        const target = this.randomVisiblePlayer(from, opts.randomRange ?? a.random, yOff);
+        if (target) return this.setMapNpcAggro(npc, target, 'random');
+      }
+    }
+    return passiveRange > 0 ? this.nearestVisiblePlayer(from, passiveRange, yOff) : null;
+  }
+
   nearestVisiblePlayer(from, range, yOff = 0.8) {
     let best = null, bd = range * range;
     for (const p of this.g.players) {
-      if (!p.alive || p.cloakT > 0) continue;
+      if (!this.canCreatureTarget(p)) continue;
       const d2 = (p.pos.x - from.x) ** 2 + (p.pos.z - from.z) ** 2;
       if (d2 >= bd || Math.abs(p.pos.y - from.y) > 5.5) continue;
-      if (!this.world.segmentClear(from.x, from.y + yOff, from.z, p.pos.x, p.pos.y + p.body.height * 0.55, p.pos.z)) continue;
+      const bodyH = p.body?.height ?? 1.8;
+      if (!this.world.segmentClear(from.x, from.y + yOff, from.z, p.pos.x, p.pos.y + bodyH * 0.55, p.pos.z)) continue;
       best = p; bd = d2;
     }
     return best;
@@ -667,7 +814,12 @@ export class Environment {
     for (const [i, s] of (npc.grp.userData.segs || []).entries()) s.position.x = Math.sin(npc.wiggleT - i * 0.55) * 0.18;
     npc.biteCd -= dt;
     npc.gazeCd -= dt;
-    const target = this.nearestVisiblePlayer(p, npc.range, 0.8);
+    const target = this.mapNpcTarget(npc, p, {
+      passiveRange: npc.range,
+      randomRange: Math.max(npc.range + 8, NPC_ALERTS.basilisk.random),
+      aggroRange: Math.max(npc.range + 12, NPC_ALERTS.basilisk.aggro),
+      yOff: 0.8,
+    });
     if (target) {
       const wantYaw = Math.atan2(target.pos.x - p.x, target.pos.z - p.z);
       const dy = ((wantYaw - npc.grp.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
@@ -693,7 +845,7 @@ export class Environment {
     const z = npc.gaze;
     z.t += dt;
     const t = z.target;
-    if (!t.alive || !this.world.segmentClear(p.x, p.y + 0.8, p.z, t.pos.x, t.pos.y + 0.9, t.pos.z)) {
+    if (!this.canCreatureTarget(t) || !this.world.segmentClear(p.x, p.y + 0.8, p.z, t.pos.x, t.pos.y + 0.9, t.pos.z)) {
       npc.gaze = null;
       return;
     }
@@ -725,7 +877,13 @@ export class Environment {
     npc.stabCd -= dt;
     npc.alarmCd -= dt;
     npc.wiggleT += dt * 8;
-    const target = this.nearestVisiblePlayer(p, npc.cfg.alarmRange ?? 10, 0.7);
+    const alarmRange = npc.cfg.alarmRange ?? 10;
+    const target = this.mapNpcTarget(npc, p, {
+      passiveRange: alarmRange,
+      randomRange: Math.max(alarmRange + 9, NPC_ALERTS.goblin.random),
+      aggroRange: Math.max(alarmRange + 14, NPC_ALERTS.goblin.aggro),
+      yOff: 0.7,
+    });
     let tx, ty, tz, spd = npc.speed;
     if (target) {
       tx = target.pos.x; ty = target.pos.y; tz = target.pos.z;
@@ -772,20 +930,30 @@ export class Environment {
     const p = npc.grp.position;
     npc.hitCd -= dt;
     npc.speed += ((npc.cfg.speed ?? 10.5) - npc.speed) * Math.min(1, dt * 0.35);
-    const goal = npc.route[npc.routeIdx];
+    const target = this.mapNpcTarget(npc, p, {
+      passiveRange: 0,
+      randomRange: npc.cfg.huntRange ?? NPC_ALERTS.bludger.random,
+      aggroRange: npc.cfg.aggroRange ?? NPC_ALERTS.bludger.aggro,
+      yOff: 0.2,
+      requireSight: false,
+    });
+    const goal = target
+      ? { x: target.pos.x, y: target.pos.y + 0.95, z: target.pos.z }
+      : npc.route[npc.routeIdx];
+    const moveSpeed = npc.speed * (target ? 1.22 : 1);
     const dx = goal.x - p.x, dy = goal.y - p.y, dz = goal.z - p.z;
     const len = Math.hypot(dx, dy, dz);
-    if (len < 0.8) npc.routeIdx = (npc.routeIdx + 1) % npc.route.length;
-    else {
-      p.x += (dx / len) * npc.speed * dt;
-      p.y += (dy / len) * npc.speed * dt;
-      p.z += (dz / len) * npc.speed * dt;
+    if (!target && len < 0.8) npc.routeIdx = (npc.routeIdx + 1) % npc.route.length;
+    else if (len > 0.05) {
+      p.x += (dx / len) * moveSpeed * dt;
+      p.y += (dy / len) * moveSpeed * dt;
+      p.z += (dz / len) * moveSpeed * dt;
     }
     npc.grp.rotation.x += dt * npc.spin;
     npc.grp.rotation.z -= dt * npc.spin * 0.7;
     if (npc.hitCd > 0) return;
     for (const q of g.players) {
-      if (!q.alive || q.spawnProtT > 0) continue;
+      if (!this.canCreatureTarget(q)) continue;
       const d2 = (q.pos.x - p.x) ** 2 + (q.pos.z - p.z) ** 2;
       if (d2 > 1.25 ** 2 || Math.abs(q.pos.y + 0.9 - p.y) > 2.2) continue;
       const away = V.set(q.pos.x - p.x, 0, q.pos.z - p.z);
@@ -849,6 +1017,7 @@ export class Environment {
       cx, cz, orbitR: span / 2 + 16, h: 36,
       a: rand(0, Math.PI * 2), state: 'circle', stateT: 0,
       cdUntil: this.g.time + 15, breath: null, from: null, roarT: rand(8, 20),
+      huntAt: this.g.time + rand(22, 40),
     };
   }
 
@@ -877,6 +1046,11 @@ export class Environment {
       if (d.roarT <= 0) {
         d.roarT = rand(24, 50);
         g.audio.play('dragon_roar', { pos, vol: 0.45 });
+      }
+      if (this.combatLive() && g.time >= d.huntAt && g.time >= d.cdUntil) {
+        d.huntAt = g.time + rand(28, 55);
+        const target = this.randomExposedPlayer();
+        if (target) this.triggerDragonStrike(target, false);
       }
     } else if (d.state === 'dive') {
       const b = d.breath;

@@ -30,6 +30,7 @@ export class Game {
 
     this.mode = setup.mode; // 'relic' | 'dm'
     this.dmBanned = new Set(setup.dmBanned || []);
+    this.dmKillTarget = clamp(Number(setup.dmKillTarget) || ROUND.dmKillTarget, 1, 999);
     this.format = FORMATS.find((f) => f.id === (setup.format || 'mr8'));
     // difficulty: preset axes, or the player's own slider mix
     const preset = DIFFICULTIES.find((d) => d.id === setup.difficulty);
@@ -232,8 +233,27 @@ export class Game {
       this.dmLoadout(p);
       this.dmSpawn(p);
     }
-    this.hud.announce('DEATHMATCH WARM-UP', 'Free for all practice — most kills wins', 'round');
+    this.hud.announce('DEATHMATCH WARM-UP', `Team deathmatch — first to ${this.dmKillTarget} kills wins`, 'round');
     this.audio.stinger('round_start');
+  }
+
+  teamKills(team) {
+    return this.teamPlayers(team).reduce((sum, p) => sum + p.kills, 0);
+  }
+
+  deathmatchScore() {
+    return {
+      [TEAM.ORDER]: this.teamKills(TEAM.ORDER),
+      [TEAM.DEATH]: this.teamKills(TEAM.DEATH),
+    };
+  }
+
+  deathmatchWinner(requireTarget = false) {
+    const score = this.deathmatchScore();
+    const high = Math.max(score[TEAM.ORDER], score[TEAM.DEATH]);
+    if (requireTarget && high < this.dmKillTarget) return null;
+    if (score[TEAM.ORDER] === score[TEAM.DEATH]) return null;
+    return score[TEAM.ORDER] > score[TEAM.DEATH] ? TEAM.ORDER : TEAM.DEATH;
   }
 
   dmLoadout(p) {
@@ -538,6 +558,11 @@ export class Game {
     }
 
     if (this.mode === 'dm') {
+      const winner = this.deathmatchWinner(true);
+      if (winner) {
+        this.finishMatch(winner);
+        return;
+      }
       setTimeout(() => {
         if (!this.over && this.mode === 'dm') {
           this.dmSpawn(victim);
@@ -1259,9 +1284,7 @@ export class Game {
     if (this.mode === 'dm') {
       this.dmTimer -= dt;
       if (this.dmTimer <= 0) {
-        let top = this.players[0];
-        for (const p of this.players) if (p.kills > top.kills) top = p;
-        this.finishMatch(top.team);
+        this.finishMatch(this.deathmatchWinner(false));
         return;
       }
     } else if (this.state === 'freeze') {
