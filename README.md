@@ -1,4 +1,4 @@
-# WizardStrike 1.6 — Hogwarts Duels
+# DuelStrike 1.6 — Hogwarts Duels
 
 A fully offline, first-person wizard dueling game with Counter-Strike 1.6 rules:
 round-based 5v5 (Order of the Phoenix vs Death Eaters), a plant/dispel objective

@@ -1,4 +1,4 @@
-# WizardStrike — Optimization & Testing Spec
+# DuelStrike — Optimization & Testing Spec
 
 Draft spec for a focused pass on **performance**, **gameplay simulation**, **code
 architecture**, and **testing**. Grounded in the current code (June 2026). Line
@@ -9,7 +9,7 @@ the diagnosis.
 
 ## 1. Context & goals
 
-WizardStrike is a Three.js + Vite, fully-offline 5v5 FPS. Ten wizards cast,
+DuelStrike is a Three.js + Vite, fully-offline 5v5 FPS. Ten wizards cast,
 particle storms layer up, fifteen maps. The engine has good bones — merged map
 geometry, pooled bolt VFX, a GPU `Points` particle system, an `?auto` headless
 mode, and a particle quality governor — but the heaviest costs are **not** the

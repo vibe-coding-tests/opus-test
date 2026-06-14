@@ -1,9 +1,9 @@
 {
-  "name": "wizard-duel",
+  "name": "duelstrike",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "WizardStrike 1.6 — CS 1.6 style wizard dueling, fully offline",
+  "description": "DuelStrike 1.6 — CS 1.6 style wizard dueling, fully offline",
   "repository": {
     "type": "git",
     "url": "https://github.com/char-boomer-remakes/wizard-duel.git"

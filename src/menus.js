@@ -162,7 +162,7 @@ export class Menus {
   showMain() {
     const p = this.panel('main-menu');
     el('div', 'title-glow', p);
-    el('h1', 'game-title', p, 'WIZARDSTRIKE 1.6');
+    el('h1', 'game-title', p, 'DUELSTRIKE 1.6');
     el('div', 'game-sub', p, 'Hogwarts duels · Counter-Strike 1.6 rules · fully offline');
     const btns = el('div', 'main-btns', p);
     const mk = (label, sub, fn) => {

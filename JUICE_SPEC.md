@@ -1,4 +1,4 @@
-# WizardStrike — Game Feel & Spell Identity Spec ("Make It Sing")
+# DuelStrike — Game Feel & Spell Identity Spec ("Make It Sing")
 
 Draft spec for a major pass on **game feel, special effects, audio, and UI/UX** —
 the "dopamine layer." Every spell should be identifiable by its **look**, its
@@ -14,7 +14,7 @@ this one spends some of that budget on impact. §7 reconciles the two.
 
 ## 1. Context & goals
 
-WizardStrike already has a real juice foundation, which is why it's worth pushing
+DuelStrike already has a real juice foundation, which is why it's worth pushing
 hard: screen shake (`src/game.js:890`), hitstop + slow-mo behind a `juice` setting
 (`src/game.js:898`/`src/main.js:15`), CS-style view-punch that bolts follow
 (`src/player.js:66`, `src/spells.js:153`), an Avada FOV-scope (`src/game.js:1346`),

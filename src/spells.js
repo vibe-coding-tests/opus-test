@@ -612,8 +612,8 @@ export class SpellSystem {
         if (!p.alive) continue;
         const dx = p.pos.x - f.x, dz = p.pos.z - f.z;
         if (dx * dx + dz * dz < (f.r + 0.35) ** 2 && Math.abs(p.pos.y - f.y) < 2.4) {
-          if (p === f.owner || p.team !== f.owner.team) {
-            let d = f.dps * dt * f.owner.effPower() * (f.owner.disc?.dotMult ?? 1);
+          if (!f.owner || p === f.owner || p.team !== f.owner.team) {
+            let d = f.dps * dt * (f.owner?.effPower() ?? 1) * (f.owner?.disc?.dotMult ?? 1);
             if (p.char.id === 'ron') d *= 0.8;
             if (p.disc?.blastResist) d *= p.disc.blastResist;
             if (p.burnT <= 0) game.effects.igniteFX(p); // catching fire
