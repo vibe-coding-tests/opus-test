@@ -11,6 +11,10 @@ import { HUD } from './hud.js';
 import { Menus } from './menus.js';
 import { Game } from './game.js';
 import { ROUND } from './data.js';
+import { Net } from './net/net.js';
+
+const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'ws://localhost:8787';
+let net = null;
 
 const DEFAULT_SETTINGS = {
   sens: 1.0,
@@ -157,6 +161,13 @@ const menus = new Menus(uiEl, {
   saveSettings, applySettings,
   startGame, quitToMenu, resumeGame,
   getGame: () => game,
+  net: {
+    host: (name) => { net = new Net(RELAY_URL); net.host(name); return net; },
+    join: (room, name) => { net = new Net(RELAY_URL); net.join(room, name); return net; },
+    current: () => net,
+    relayUrl: RELAY_URL,
+  },
+  startNetGame,
 });
 
 function startGame(setup, { requestLock = true, loading = true } = {}) {
@@ -169,7 +180,7 @@ function startGame(setup, { requestLock = true, loading = true } = {}) {
     postfx.setScene(scene);
     paused = false;
     game = window.__game = new Game({
-      scene, camera, renderer, audio, input, hud, settings, postfx,
+      scene, camera, renderer, audio, input, hud, settings, postfx, net,
       onMatchEnd: (winner) => {
         setTimeout(() => {
           if (!game) return;
@@ -204,6 +215,10 @@ function startGame(setup, { requestLock = true, loading = true } = {}) {
   } else {
     build();
   }
+}
+
+function startNetGame(setup) {
+  startGame(setup, { requestLock: true, loading: true });
 }
 
 let endedGame = null;
@@ -352,6 +367,14 @@ if (params.get('auto')) {
     };
   }
   startGame(setup, { requestLock: false, loading: false }); // tests build synchronously
+} else if (params.get('room')) {
+  menus.showMain();
+  menus.showMultiplayer();
+  const n = net = new Net(RELAY_URL);
+  n.join(params.get('room'), 'Wizard');
+  n.on('welcome', () => {
+    n.on('message', (g) => { if (g.t === 'start') menus.startMpGame(n, false, g.setup); });
+  });
 } else {
   menus.showMain();
 }
