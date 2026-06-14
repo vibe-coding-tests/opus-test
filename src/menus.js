@@ -1,6 +1,6 @@
 // Menus: main, match setup (mode/map/team/character/wand/bots), settings with
 // keybinds + crosshair editor, pause, lock overlay, match end screen.
-import { CHARACTERS, WANDS, EQUIPMENT, EQUIP_EFFECTS, TEAM, TEAM_INFO, MAP_LIST, DIFFICULTIES, FORMATS, DISCIPLINES, SPELLS } from './data.js';
+import { CHARACTERS, WANDS, EQUIPMENT, EQUIP_EFFECTS, TEAM, TEAM_INFO, MAP_LIST, DIFFICULTIES, FORMATS, DISCIPLINES, SPELLS, ROUND } from './data.js';
 import { MAP_BUILDERS } from './maps/index.js';
 import { bakeRadar } from './mapbuilder.js';
 import { el, clamp, fmtKDA } from './utils.js';
@@ -25,11 +25,12 @@ export class Menus {
       mode: 'relic', mapId: 'dust2', team: TEAM.ORDER, charId: 'harry', prefWand: 'holly',
       botsFriendly: 4, botsEnemy: 5, difficulty: 'normal', format: 'mr8', discipline: 'duelist',
       aiCustom: { reflex: 50, aim: 50, sense: 50, iq: 50 },
-      squad: [], foes: [], dmBanned: [],
+      squad: [], foes: [], dmBanned: [], dmKillTarget: ROUND.dmKillTarget,
       ...(ctx.settings.lastSetup || {}),
     };
     if (!this.setup.aiCustom) this.setup.aiCustom = { reflex: 50, aim: 50, sense: 50, iq: 50 };
     if (!Array.isArray(this.setup.dmBanned)) this.setup.dmBanned = [];
+    if (![25, 50, 75, 100].includes(Number(this.setup.dmKillTarget))) this.setup.dmKillTarget = ROUND.dmKillTarget;
     // scrub stale roster picks (old saves, renamed characters, champion overlap)
     const validChar = (id) => CHARACTERS.some((c) => c.id === id);
     this.setup.squad = (this.setup.squad || []).filter((id) => validChar(id) && id !== this.setup.charId);
@@ -172,7 +173,7 @@ export class Menus {
       return b;
     };
     mk('PLAY — CURSED RELIC', 'Round-based 5v5 vs bots. Plant or dispel the Relic.', () => this.showSetup('relic'));
-    mk('DEATHMATCH', 'Free-for-all warm-up. All spells unlocked.', () => this.showSetup('dm'));
+    mk('DEATHMATCH', 'Team kill race. All spells unlocked.', () => this.showSetup('dm'));
     mk('SETTINGS', 'Mouse, keybinds, crosshair, video, audio.', () => this.showSettings(false));
     mk('HOW TO PLAY', 'Controls and the rules of engagement.', () => this.showHelp());
     el('div', 'footer-note', p, 'WASD move · LMB cast · RMB Protego · R recharge · B buy · E plant/defuse · Tab scoreboard');
@@ -509,6 +510,18 @@ export class Menus {
       fmtSel.onchange = () => { this.setup.format = fmtSel.value; };
     }
     if (mode === 'dm') {
+      el('h3', 'sec-title', scroll, 'DEATHMATCH RULES');
+      const dmOpts = el('div', 'opts-grid', scroll);
+      const targetRow = el('div', 'opt-row', dmOpts);
+      el('label', '', targetRow, 'Kill target');
+      const targetSel = el('select', '', targetRow);
+      for (const n of [25, 50, 75, 100]) {
+        const o = el('option', '', targetSel, `${n} team kills`);
+        o.value = String(n);
+      }
+      targetSel.value = String(this.setup.dmKillTarget || ROUND.dmKillTarget);
+      targetSel.onchange = () => { this.setup.dmKillTarget = Number(targetSel.value); };
+
       el('h3', 'sec-title', scroll, 'DEATHMATCH BANS');
       el('div', 'card-sub', scroll, 'Toggle out high-impact spells for balance experiments. Banned spells never appear in the warm-up loadout.');
       const banGrid = el('div', 'ban-grid', scroll);
@@ -801,7 +814,8 @@ export class Menus {
         cell.title = `Round ${i + 1}`;
       });
     } else {
-      el('div', 'end-score', p, '5 minutes of mayhem');
+      const score = game.deathmatchScore();
+      el('div', 'end-score', p, `${TEAM_INFO.order.short} ${score.order} — ${score.death} ${TEAM_INFO.death.short} · Race to ${game.dmKillTarget}`);
     }
     // match MVP: damage + kills + objective work + round-MVP stars
     const mvpScore = (q) => q.dmgDealt + q.kills * 70 + (q.plants + q.defuses) * 100 + q.mvps * 60;

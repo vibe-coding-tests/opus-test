@@ -10,6 +10,7 @@ import { Input } from './input.js';
 import { HUD } from './hud.js';
 import { Menus } from './menus.js';
 import { Game } from './game.js';
+import { ROUND } from './data.js';
 
 const DEFAULT_SETTINGS = {
   sens: 1.0,
@@ -334,6 +335,7 @@ if (params.get('auto')) {
     difficulty: params.get('diff') || 'normal',
     discipline: params.get('disc') || null,
     format: 'mr8',
+    dmKillTarget: Number(params.get('kills') || ROUND.dmKillTarget),
     // hand-picked lineups (?squad=ginny,neville&foes=greyback,umbridge)
     squad: (params.get('squad') || '').split(',').filter(Boolean),
     foes: (params.get('foes') || '').split(',').filter(Boolean),

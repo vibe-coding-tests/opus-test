@@ -728,7 +728,12 @@ export class HUD {
     sb.innerHTML = '';
     const head = el('div', 'sb-head', sb);
     el('div', 'sb-map', head, `${g.setup.mapId.toUpperCase()} — ${g.mode === 'dm' ? 'DEATHMATCH' : `Round ${g.roundNum}`}`);
-    el('div', 'sb-score', head, `${TEAM_INFO.order.short} ${g.score.order} : ${g.score.death} ${TEAM_INFO.death.short}`);
+    if (g.mode === 'dm') {
+      const score = g.deathmatchScore();
+      el('div', 'sb-score', head, `${TEAM_INFO.order.short} ${score.order} : ${score.death} ${TEAM_INFO.death.short} · Race to ${g.dmKillTarget}`);
+    } else {
+      el('div', 'sb-score', head, `${TEAM_INFO.order.short} ${g.score.order} : ${g.score.death} ${TEAM_INFO.death.short}`);
+    }
     // round history: one cell per finished round (☠ elim, ⏱ time, ✦ dispel, ✸ detonation)
     if (g.mode !== 'dm' && g.roundHistory.length) {
       const strip = el('div', 'sb-strip', sb);
@@ -938,7 +943,7 @@ export class HUD {
     if (g.mode === 'dm') {
       this.timerEl.textContent = fmtTime(g.dmTimer);
       this.timerEl.classList.remove('planted');
-      this.roundLabel.textContent = 'K/D/A · KDA';
+      this.roundLabel.textContent = `Team kills · race to ${g.dmKillTarget}`;
     } else if (g.state === 'freeze') {
       this.timerEl.textContent = fmtTime(g.stateT);
       this.timerEl.classList.remove('planted');
@@ -953,10 +958,11 @@ export class HUD {
       this.roundLabel.textContent = `Round ${g.roundNum}`;
     }
     if (g.mode === 'dm') {
-      this.scoreL.textContent = `${p.kills}/${p.deaths}/${p.assists}`;
-      this.scoreR.textContent = fmtKDA(p);
-      this.scoreL.title = 'Kills / Deaths / Assists';
-      this.scoreR.title = 'KDA';
+      const score = g.deathmatchScore();
+      this.scoreL.textContent = String(score.order);
+      this.scoreR.textContent = String(score.death);
+      this.scoreL.title = `${TEAM_INFO.order.name} team kills`;
+      this.scoreR.title = `${TEAM_INFO.death.name} team kills`;
     } else {
       this.scoreL.textContent = String(g.score.order);
       this.scoreR.textContent = String(g.score.death);

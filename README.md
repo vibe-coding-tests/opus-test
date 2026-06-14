@@ -29,7 +29,7 @@ On Windows? See [WINDOWS.md](WINDOWS.md) for setup steps.
   or B and hold **E** to plant. The Order defends — eliminate the attackers, run
   the clock, or hold **E** on a planted Relic to dispel it with Finite
   Incantatem. First to 8 rounds wins; sides swap at halftime.
-- **Deathmatch:** free-for-all warm-up with every spell unlocked.
+- **Deathmatch:** team kill race with every spell unlocked.
 
 ### Maps
 
