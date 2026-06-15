@@ -10,10 +10,12 @@ battlegrounds.
 Built with Three.js + Vite. All textures, sounds, and announcer stingers are
 synthesized at runtime — no CDN or external assets.
 
-> **Note:** This is a learning project for the Agentic Software Development
-> Lifecycle — a testbed for the Cursor agent and its long-running harness
-> setup. The game is the workload; the real point is exercising the agentic
-> SDLC over a large, evolving codebase.
+> **Note:** This is a Workday project for stress-testing and understanding the
+> capabilities of new model releases for agentic architectural development. It
+> doubles as a learning project for the Agentic Software Development Lifecycle
+> and a testbed for the Cursor agent and its long-running harness setup. The
+> game is just the workload; the real point is exercising the agentic SDLC over
+> a large, evolving codebase.
 
 ## Run it
 
