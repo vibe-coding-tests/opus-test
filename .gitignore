@@ -3,4 +3,5 @@ dist/
 .pw-browsers/
 shots/
 **/.shots/
+artifacts/
 .DS_Store

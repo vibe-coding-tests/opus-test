@@ -418,6 +418,7 @@ node scripts/shot.mjs        # screenshots of the glass HUD, buy menu, scoreboar
 node scripts/rigshot.mjs     # lineup portrait of the new character models
 node scripts/debug-brain.mjs # dump attacker-bot decision state mid-round
 node scripts/net-smoke.mjs   # two-client multiplayer smoke: presence, bot snapshot, host-authoritative damage round-trip (spawns its own relay; needs the dev server)
+node scripts/visual-audit.mjs # Playwright per-map visual + collision audit: walks all 15 maps and flags blocked spawns, low ceilings, unreachable sites, and console errors; writes screenshots + report.json to artifacts/
 ```
 
 ## Performance
